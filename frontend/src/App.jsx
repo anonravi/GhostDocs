@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, RefreshCw, ExternalLink, Ghost, AlertCircle, CheckCircle2, Clock, LogOut, User as UserIcon, Shield, Users, Trash2, Key, GitHub } from 'lucide-react';
+import { Send, RefreshCw, ExternalLink, Ghost, AlertCircle, CheckCircle2, Clock, LogOut, User as UserIcon, Shield, Users, Trash2, Key } from 'lucide-react';
 import { GoogleOAuthProvider, GoogleLogin, googleLogout } from '@react-oauth/google';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
@@ -52,7 +52,7 @@ const UserLogin = ({ onLoginSuccess }) => (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
           <GoogleLogin onSuccess={onLoginSuccess} onError={() => alert('Login Failed')} width="280px" />
           <button className="neo-button" style={{ width: '280px', background: '#1a1a1a', color: 'white', border: 'none', display: 'flex', justifyContent: 'center', gap: '12px', height: '40px', padding: '0' }} onClick={loginWithGithub}>
-            <GitHub size={18} /> Sign in with GitHub
+            <Users size={18} /> Sign in with GitHub
           </button>
         </div>
       </div>
