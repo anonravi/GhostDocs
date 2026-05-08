@@ -34,11 +34,18 @@ const Navbar = ({ user, onLogout, activeTab, setActiveTab }) => (
     </div>
     
     <div className="navbar-actions" style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+      {user && (
+        <span style={{ fontWeight: 800, fontSize: '0.9rem', opacity: 0.8, display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <UserIcon size={16} /> {user.name || user.email.split('@')[0]}
+        </span>
+      )}
       <nav style={{ display: 'flex', gap: '10px' }}>
         <button className="neo-button" style={{ background: activeTab === 'dashboard' ? 'var(--primary)' : 'white' }} onClick={() => setActiveTab('dashboard')}>Dash</button>
         {user?.is_admin && <button className="neo-button" style={{ background: activeTab === 'admin' ? 'var(--accent)' : 'white' }} onClick={() => setActiveTab('admin')}>Admin</button>}
       </nav>
-      <button className="neo-button" style={{ background: 'var(--secondary)' }} onClick={onLogout}><LogOut size={16} /></button>
+      <button className="neo-button" style={{ background: 'var(--secondary)' }} onClick={onLogout} title="Logout">
+        <LogOut size={16} />
+      </button>
     </div>
   </header>
 );
