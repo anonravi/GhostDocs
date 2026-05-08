@@ -12,5 +12,6 @@ celery
 redis
 httpx
 PyJWT
+passlib[bcrypt]
 aiosqlite
 psycopg2-binary

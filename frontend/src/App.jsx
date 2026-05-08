@@ -38,68 +38,80 @@ const Navbar = ({ user, onLogout, activeTab, setActiveTab }) => (
 );
 
 const UserLoginContent = ({ onLoginSuccess }) => {
+  const [isRegister, setIsRegister] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
+
   const login = useGoogleLogin({
     onSuccess: async (tokenResponse) => {
       try {
         const { data } = await axios.post(`${API_URL}/auth/google`, { token: tokenResponse.access_token, is_access_token: true });
         onLoginSuccess(data);
       } catch (e) { 
-        alert(`Google Auth failed at ${API_URL}: ${e.response?.data?.detail || e.message}`); 
+        alert(`Google Auth failed: ${e.response?.data?.detail || e.message}`); 
       }
-    },
-    onError: () => alert('Login Failed')
+    }
   });
+
+  const handleManualAuth = async (e) => {
+    e.preventDefault();
+    try {
+      const endpoint = isRegister ? 'register' : 'login';
+      const payload = isRegister ? { email, password, name } : { email, password };
+      const { data } = await axios.post(`${API_URL}/auth/${endpoint}`, payload);
+      onLoginSuccess(data);
+    } catch (e) {
+      alert(`${isRegister ? 'Sign Up' : 'Login'} failed: ${e.response?.data?.detail || e.message}`);
+    }
+  };
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
       <motion.div 
-        initial={{ scale: 0.8, opacity: 0, rotate: -2 }}
-        animate={{ scale: 1, opacity: 1, rotate: 0 }}
-        transition={{ type: "spring", damping: 12 }}
+        initial={{ scale: 0.8, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
         className="neo-card login-card" 
-        style={{ textAlign: 'center', width: '100%', maxWidth: '420px', padding: '50px 30px' }}
+        style={{ textAlign: 'center', width: '100%', maxWidth: '420px', padding: '40px 30px' }}
       >
-        <div className="floating" style={{ display: 'inline-block', marginBottom: '30px' }}>
-          <Ghost size={80} strokeWidth={2.5} />
+        <div className="floating" style={{ display: 'inline-block', marginBottom: '20px' }}>
+          <Ghost size={60} strokeWidth={2.5} />
         </div>
-        <motion.h1 
-          initial={{ y: 20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.2 }}
-          style={{ fontSize: '3rem', fontWeight: 900, marginBottom: '10px' }}
-        >
-          GhostDocs
-        </motion.h1>
-        <motion.p 
-          initial={{ y: 20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.3 }}
-          style={{ marginBottom: '40px', fontSize: '1.1rem', opacity: 0.7 }}
-        >
-          Autonomous AI Documentation Agent
-        </motion.p>
-        <motion.div 
-          initial={{ y: 20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.4 }}
-          style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}
-        >
-          <button className="neo-button" style={{ background: 'white', justifyContent: 'center', padding: '15px' }} onClick={() => login()}>
-            <img src="https://www.google.com/favicon.ico" style={{ width: '18px' }} /> Sign in with Google
-          </button>
-          <button className="neo-button" style={{ background: '#000', color: 'white', border: 'none', justifyContent: 'center', padding: '15px', fontWeight: 500 }} onClick={loginWithGithub}>
-            <Users size={18} /> Continue with GitHub
-          </button>
-        </motion.div>
+        <h1 style={{ fontSize: '2.5rem', fontWeight: 900, marginBottom: '5px' }}>GhostDocs</h1>
+        <p style={{ marginBottom: '30px', fontSize: '1rem', opacity: 0.7 }}>{isRegister ? 'Create your account' : 'Welcome back'}</p>
         
-        <motion.div 
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.8 }}
-          style={{ marginTop: '30px', fontSize: '0.8rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--primary)' }}
+        <form onSubmit={handleManualAuth} style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '24px' }}>
+          {isRegister && (
+            <input className="neo-input" placeholder="Full Name" value={name} onChange={e => setName(e.target.value)} required />
+          )}
+          <input className="neo-input" type="email" placeholder="Email Address" value={email} onChange={e => setEmail(e.target.value)} required />
+          <input className="neo-input" type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} required />
+          <button className="neo-button" style={{ background: 'var(--accent)', justifyContent: 'center', padding: '12px' }}>
+            {isRegister ? 'Create Account' : 'Sign In'}
+          </button>
+        </form>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '24px' }}>
+          <div style={{ height: '2px', background: '#eee', flex: 1 }}></div>
+          <span style={{ fontSize: '0.8rem', fontWeight: 800, opacity: 0.5 }}>OR</span>
+          <div style={{ height: '2px', background: '#eee', flex: 1 }}></div>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <button className="neo-button" style={{ background: 'white', justifyContent: 'center', padding: '12px' }} onClick={() => login()}>
+            <img src="https://www.google.com/favicon.ico" style={{ width: '16px' }} /> Continue with Google
+          </button>
+          <button className="neo-button" style={{ background: '#000', color: 'white', border: 'none', justifyContent: 'center', padding: '12px', fontWeight: 500 }} onClick={loginWithGithub}>
+            <Users size={16} /> Continue with GitHub
+          </button>
+        </div>
+        
+        <button 
+          onClick={() => setIsRegister(!isRegister)}
+          style={{ marginTop: '24px', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: '0.9rem', color: 'var(--primary)' }}
         >
-          ✨ Documentation, Automagically.
-        </motion.div>
+          {isRegister ? 'Already have an account? Sign In' : 'No account? Create one now'}
+        </button>
       </motion.div>
     </div>
   );

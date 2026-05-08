@@ -118,6 +118,46 @@ async def toggle_user_admin(user_id: int, admin: models.User = Depends(get_curre
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
 
+from passlib.context import CryptContext
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+@app.post("/auth/register")
+async def register(req: dict, db: Session = Depends(database.get_db)):
+    email = req.get("email")
+    password = req.get("password")
+    name = req.get("name", email.split('@')[0])
+    
+    if not email or not password: raise HTTPException(400, "Missing fields")
+    if db.query(models.User).filter(models.User.email == email).first():
+        raise HTTPException(400, "Account already exists")
+    
+    is_first = db.query(models.User).count() == 0
+    hashed = pwd_context.hash(password)
+    user = models.User(email=email, full_name=name, hashed_password=hashed, is_admin=1 if is_first else 0)
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    
+    access_token = create_access_token(data={"sub": user.email})
+    return {**user.__dict__, "access_token": access_token}
+
+@app.post("/auth/login")
+async def login(req: dict, db: Session = Depends(database.get_db)):
+    email = req.get("email")
+    password = req.get("password")
+    user = db.query(models.User).filter(models.User.email == email).first()
+    if not user or not user.hashed_password: raise HTTPException(401, "Invalid credentials")
+    if not pwd_context.verify(password, user.hashed_password):
+        raise HTTPException(401, "Invalid credentials")
+    
+    if not user.is_active: raise HTTPException(403, "Banned")
+    
+    access_token = create_access_token(data={"sub": user.email})
+    return {
+        "id": user.id, "email": user.email, "name": user.full_name, 
+        "is_admin": bool(user.is_admin), "access_token": access_token
+    }
+
 @app.post("/auth/google")
 async def google_auth(req: dict, db: Session = Depends(database.get_db)):
     token = req.get("token") or req.get("credential")
