@@ -321,44 +321,117 @@ const Footer = () => (
 const LandingPage = () => {
   const navigate = useNavigate();
   return (
-    <div style={{ minHeight: '100vh', padding: '40px 20px' }}>
-      <nav style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', maxWidth: '1200px', margin: '0 auto 80px auto' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 900, fontSize: '1.5rem' }}>
-          <Ghost size={32} /> GhostDocs
+    <div className="landing-container" style={{ minHeight: '100vh', position: 'relative', overflow: 'hidden' }}>
+      {/* Background Elements */}
+      <div className="bg-glow" style={{ position: 'absolute', top: '-10%', right: '-10%', width: '40vw', height: '40vw', background: 'var(--accent)', filter: 'blur(150px)', opacity: 0.1, zIndex: 0 }}></div>
+      <div className="bg-glow" style={{ position: 'absolute', bottom: '-10%', left: '-10%', width: '40vw', height: '40vw', background: 'var(--primary)', filter: 'blur(150px)', opacity: 0.1, zIndex: 0 }}></div>
+
+      <nav style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', maxWidth: '1200px', margin: '0 auto', padding: '30px 20px', position: 'relative', zIndex: 10 }}>
+        <motion.div 
+          initial={{ x: -20, opacity: 0 }} animate={{ x: 0, opacity: 1 }}
+          style={{ display: 'flex', alignItems: 'center', gap: '12px', fontWeight: 950, fontSize: '1.8rem', letterSpacing: '-1px' }}
+        >
+          <div style={{ background: 'var(--primary)', padding: '5px', borderRadius: '8px' }}>
+            <Ghost size={32} color="white" />
+          </div>
+          GhostDocs
+        </motion.div>
+        <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
+          <button className="nav-link" onClick={() => navigate('/login')}>Pricing</button>
+          <button className="neo-button" onClick={() => navigate('/login')}>Get Started</button>
         </div>
-        <button className="neo-button" onClick={() => navigate('/login')}>Get Started</button>
       </nav>
 
-      <div style={{ maxWidth: '1200px', margin: '0 auto', textAlign: 'center' }}>
-        <motion.h1 
-          initial={{ y: 30, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
-          style={{ fontSize: 'clamp(3rem, 8vw, 6rem)', fontWeight: 900, lineHeight: 1, marginBottom: '20px' }}
-        >
-          DOCUMENTATION,<br/><span style={{ color: 'var(--accent)' }}>AUTOMAGICALLY.</span>
-        </motion.h1>
-        <p style={{ fontSize: '1.5rem', opacity: 0.7, marginBottom: '40px', maxWidth: '700px', margin: '0 auto 40px auto' }}>
-          The autonomous AI agent that scans your codebase and creates perfect GitHub PRs while you sleep.
-        </p>
-        <div style={{ display: 'flex', gap: '20px', justifyContent: 'center' }}>
-          <button className="neo-button" style={{ padding: '20px 40px', fontSize: '1.2rem', background: 'var(--primary)' }} onClick={() => navigate('/login')}>
-            Deploy Ghost Agent
-          </button>
-        </div>
+      <main style={{ maxWidth: '1200px', margin: '0 auto', padding: '100px 20px', position: 'relative', zIndex: 10 }}>
+        {/* Hero Section */}
+        <section style={{ textAlign: 'center', marginBottom: '150px' }}>
+          <motion.div
+            initial={{ y: 50, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ duration: 0.8, ease: "easeOut" }}
+          >
+            <span style={{ background: 'var(--accent)', color: 'white', padding: '8px 20px', borderRadius: '50px', fontSize: '0.9rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '2px', marginBottom: '24px', display: 'inline-block' }}>
+              The Future of Open Source
+            </span>
+            <h1 style={{ fontSize: 'clamp(3.5rem, 10vw, 7.5rem)', fontWeight: 950, lineHeight: 0.9, marginBottom: '30px', letterSpacing: '-4px' }}>
+              CODE ONCE.<br/>
+              <span style={{ color: 'transparent', WebkitTextStroke: '2px black' }}>DOCUMENT</span> ALWAYS.
+            </h1>
+            <p style={{ fontSize: '1.4rem', opacity: 0.8, marginBottom: '40px', maxWidth: '800px', margin: '0 auto 40px auto', lineHeight: 1.5 }}>
+              GhostDocs is the first autonomous agent that truly understands your architecture. It writes your docs, you write the future.
+            </p>
+            <div style={{ display: 'flex', gap: '20px', justifyContent: 'center', flexWrap: 'wrap' }}>
+              <button className="neo-button" style={{ padding: '20px 40px', fontSize: '1.3rem', background: 'var(--primary)', color: 'white' }} onClick={() => navigate('/login')}>
+                Deploy Your Ghost Agent
+              </button>
+              <button className="neo-button" style={{ padding: '20px 40px', fontSize: '1.3rem', background: 'white' }}>
+                View Demo
+              </button>
+            </div>
+          </motion.div>
+        </section>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '30px', marginTop: '100px' }}>
-          {[
-            { title: 'AST Scanning', desc: 'Deep codebase analysis using Abstract Syntax Trees.', icon: <Code /> },
-            { title: 'Auto PRs', desc: 'Generates READMEs and API docs directly to GitHub.', icon: <Users /> },
-            { title: 'AI Powered', desc: 'Driven by Gemini 1.5 Flash for state-of-the-art context.', icon: <Ghost /> }
-          ].map((feat, i) => (
-            <motion.div key={i} initial={{ y: 50, opacity: 0 }} whileInView={{ y: 0, opacity: 1 }} viewport={{ once: true }} transition={{ delay: i * 0.1 }} className="neo-card" style={{ padding: '40px', textAlign: 'left' }}>
-              <div style={{ marginBottom: '20px' }}>{feat.icon}</div>
-              <h3 style={{ fontWeight: 900, fontSize: '1.5rem', marginBottom: '10px' }}>{feat.title}</h3>
-              <p style={{ opacity: 0.7 }}>{feat.desc}</p>
-            </motion.div>
-          ))}
-        </div>
-      </div>
+        {/* Floating Code Snippet Preview */}
+        <motion.div 
+          initial={{ y: 100, opacity: 0 }}
+          whileInView={{ y: 0, opacity: 1 }}
+          viewport={{ once: true }}
+          className="neo-card"
+          style={{ background: '#1a1a1a', color: '#fff', padding: '20px', borderRadius: '20px', maxWidth: '800px', margin: '0 auto 150px auto', transform: 'rotate(-2deg)', boxShadow: '20px 20px 0px var(--primary)' }}
+        >
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '15px' }}>
+            <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: '#ff5f56' }}></div>
+            <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: '#ffbd2e' }}></div>
+            <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: '#27c93f' }}></div>
+          </div>
+          <code style={{ fontFamily: 'monospace', fontSize: '1rem', lineHeight: 1.6 }}>
+            <span style={{ color: '#ff79c6' }}>ghost</span> <span style={{ color: '#f1fa8c' }}>deploy</span> --repo <span style={{ color: '#50fa7b' }}>"ravi/ghostdocs"</span><br/>
+            <span style={{ color: '#6272a4' }}>// Analysing AST...</span><br/>
+            <span style={{ color: '#6272a4' }}>// Generating README.md...</span><br/>
+            <span style={{ color: '#6272a4' }}>// Creating Pull Request...</span><br/>
+            <span style={{ color: '#50fa7b' }}>✓ Documentation successfully deployed!</span>
+          </code>
+        </motion.div>
+
+        {/* Features Grid */}
+        <section style={{ marginBottom: '150px' }}>
+          <div style={{ textAlign: 'center', marginBottom: '60px' }}>
+            <h2 style={{ fontSize: '3rem', fontWeight: 950, letterSpacing: '-2px' }}>Ghost-Level Capabilities</h2>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '40px' }}>
+            {[
+              { title: 'Semantic Context', desc: 'Doesn\'t just read text; understands your functions, classes, and logic flow.', icon: <Code size={32} /> },
+              { title: 'PR Automation', desc: 'Automatically opens Pull Requests with updated documentation on every push.', icon: <Send size={32} /> },
+              { title: 'Diagram Generation', desc: 'Visualizes your architecture with Mermaid.js diagrams generated by AI.', icon: <RefreshCw size={32} /> },
+              { title: 'Multi-Repo Support', desc: 'Manage documentation for your entire organization from one dashboard.', icon: <Shield size={32} /> }
+            ].map((feat, i) => (
+              <motion.div 
+                key={i} 
+                initial={{ y: 30, opacity: 0 }} 
+                whileInView={{ y: 0, opacity: 1 }} 
+                viewport={{ once: true }} 
+                transition={{ delay: i * 0.1 }} 
+                className="feature-card neo-card"
+              >
+                <div style={{ width: '60px', height: '60px', background: 'var(--primary)', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '25px', color: 'white' }}>
+                  {feat.icon}
+                </div>
+                <h3 style={{ fontWeight: 900, fontSize: '1.8rem', marginBottom: '15px' }}>{feat.title}</h3>
+                <p style={{ fontSize: '1.1rem', lineHeight: 1.6, opacity: 0.8 }}>{feat.desc}</p>
+              </motion.div>
+            ))}
+          </div>
+        </section>
+
+        {/* CTA Section */}
+        <section style={{ background: 'var(--primary)', padding: '80px 40px', borderRadius: '30px', textAlign: 'center', color: 'white' }}>
+          <h2 style={{ fontSize: '3.5rem', fontWeight: 950, marginBottom: '20px', letterSpacing: '-2px' }}>Ready to haunt your repos?</h2>
+          <p style={{ fontSize: '1.3rem', marginBottom: '40px', opacity: 0.9 }}>Join 1,000+ developers automating their documentation.</p>
+          <button className="neo-button" style={{ background: 'white', color: 'black', padding: '20px 60px', fontSize: '1.3rem' }} onClick={() => navigate('/login')}>
+            Start Free Now
+          </button>
+        </section>
+      </main>
     </div>
   );
 };
