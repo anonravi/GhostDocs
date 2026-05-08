@@ -142,7 +142,7 @@ async def register(req: dict, db: Session = Depends(database.get_db)):
     db.refresh(user)
     
     access_token = create_access_token(data={"sub": user.email})
-    return {**user.__dict__, "access_token": access_token}
+    return {**user.__dict__, "access_token": access_token, "has_github": bool(user.github_token)}
 
 @app.post("/auth/login")
 async def login(req: dict, db: Session = Depends(database.get_db)):
@@ -158,7 +158,8 @@ async def login(req: dict, db: Session = Depends(database.get_db)):
     access_token = create_access_token(data={"sub": user.email})
     return {
         "id": user.id, "email": user.email, "name": user.full_name, 
-        "is_admin": bool(user.is_admin), "access_token": access_token
+        "is_admin": bool(user.is_admin), "access_token": access_token,
+        "has_github": bool(user.github_token)
     }
 
 @app.post("/auth/google")
@@ -198,7 +199,8 @@ async def google_auth(req: dict, db: Session = Depends(database.get_db)):
         "email": user.email, 
         "name": user.full_name, 
         "is_admin": bool(user.is_admin),
-        "access_token": access_token
+        "access_token": access_token,
+        "has_github": bool(user.github_token)
     }
 
 @app.post("/auth/github")
@@ -237,5 +239,24 @@ async def github_auth(data: dict, db: Session = Depends(database.get_db)):
         "email": user.email, 
         "name": user.full_name, 
         "is_admin": bool(user.is_admin),
-        "access_token": access_token
+        "access_token": access_token,
+        "has_github": bool(user.github_token)
     }
+
+@app.post("/auth/github/connect")
+async def connect_github(data: dict, user: models.User = Depends(get_current_user), db: Session = Depends(database.get_db)):
+    code = data.get("code")
+    import httpx
+    async with httpx.AsyncClient() as client:
+        res = await client.post("https://github.com/login/oauth/access_token", headers={"Accept": "application/json"}, data={
+            "client_id": os.getenv("GITHUB_CLIENT_ID"),
+            "client_secret": os.getenv("GITHUB_CLIENT_SECRET"),
+            "code": code
+        })
+        gh_token = res.json().get("access_token")
+        if not gh_token: raise HTTPException(401, "Invalid GitHub Code")
+        
+        user.github_token = gh_token
+        db.commit()
+        
+    return {"status": "connected", "has_github": True}

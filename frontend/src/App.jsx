@@ -17,6 +17,12 @@ axios.interceptors.request.use(config => {
 });
 
 const loginWithGithub = () => {
+  localStorage.setItem('github_intent', 'login');
+  window.location.href = `https://github.com/login/oauth/authorize?client_id=${GITHUB_CLIENT_ID}&scope=user,repo`;
+};
+
+const connectGithub = () => {
+  localStorage.setItem('github_intent', 'connect');
   window.location.href = `https://github.com/login/oauth/authorize?client_id=${GITHUB_CLIENT_ID}&scope=user,repo`;
 };
 
@@ -228,19 +234,32 @@ function Dashboard({ user, onLogout }) {
           <motion.div key="dash" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
             <section className="neo-card">
               <h2 style={{ marginBottom: '20px' }}>Trigger Generation</h2>
-              <div className="dashboard-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '24px' }}>
-                <div>
-                  <label style={{ display: 'block', marginBottom: '8px', opacity: 0.8 }}>Repository</label>
-                  <input className="neo-input" value={repo} onChange={e => setRepo(e.target.value)} placeholder="org/repo" />
+              {!user?.has_github ? (
+                <div style={{ textAlign: 'center', padding: '40px 20px', background: '#ffebee', border: '2px solid #f44336', borderRadius: '12px', marginBottom: '24px' }}>
+                  <AlertCircle size={40} color="#f44336" style={{ margin: '0 auto 16px auto', display: 'block' }} />
+                  <h3 style={{ marginBottom: '10px', color: '#b71c1c' }}>GitHub Connection Required</h3>
+                  <p style={{ marginBottom: '20px', color: '#c62828', maxWidth: '500px', margin: '0 auto 20px auto' }}>You need to link your GitHub account to allow GhostDocs to read your repositories and create pull requests.</p>
+                  <button className="neo-button" style={{ background: '#000', color: 'white', border: 'none', margin: '0 auto', display: 'flex' }} onClick={connectGithub}>
+                    <Users size={16} /> Connect GitHub Now
+                  </button>
                 </div>
-                <div>
-                  <label style={{ display: 'block', marginBottom: '8px', opacity: 0.8 }}>Branch/SHA</label>
-                  <input className="neo-input" value={sha} onChange={e => setSha(e.target.value)} placeholder="main" />
-                </div>
-              </div>
-              <button className="neo-button" onClick={triggerDocs} disabled={loading} style={{ width: '100%', justifyContent: 'center', background: 'var(--accent)' }}>
-                {loading ? <RefreshCw className="spinner" /> : <Send size={20} />} Generate & Pull Request
-              </button>
+              ) : (
+                <>
+                  <div className="dashboard-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '24px' }}>
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '8px', opacity: 0.8 }}>Repository</label>
+                      <input className="neo-input" value={repo} onChange={e => setRepo(e.target.value)} placeholder="org/repo" />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '8px', opacity: 0.8 }}>Branch/SHA</label>
+                      <input className="neo-input" value={sha} onChange={e => setSha(e.target.value)} placeholder="main" />
+                    </div>
+                  </div>
+                  <button className="neo-button" onClick={triggerDocs} disabled={loading} style={{ width: '100%', justifyContent: 'center', background: 'var(--accent)' }}>
+                    {loading ? <RefreshCw className="spinner" /> : <Send size={20} />} Generate & Pull Request
+                  </button>
+                </>
+              )}
             </section>
             
             <section>
@@ -337,7 +356,6 @@ const LandingPage = () => {
           GhostDocs
         </motion.div>
         <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
-          <button className="nav-link" onClick={() => navigate('/login')}>Pricing</button>
           <button className="neo-button" onClick={() => navigate('/login')}>Get Started</button>
         </div>
       </nav>
@@ -449,8 +467,18 @@ function MainApp() {
 
   const handleGithubCallback = async (code) => {
     try {
-      const { data } = await axios.post(`${API_URL}/auth/github`, { code });
-      loginSuccess(data);
+      const intent = localStorage.getItem('github_intent');
+      const endpoint = intent === 'connect' ? `${API_URL}/auth/github/connect` : `${API_URL}/auth/github`;
+      const { data } = await axios.post(endpoint, { code });
+      
+      if (intent === 'connect') {
+        const updatedUser = { ...user, has_github: true };
+        setUser(updatedUser);
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+        localStorage.removeItem('github_intent');
+      } else {
+        loginSuccess(data);
+      }
     } catch (e) { 
       alert(`GitHub Auth failed: ${e.response?.data?.detail || e.message}`); 
     }
