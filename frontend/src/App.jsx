@@ -44,6 +44,7 @@ const Navbar = ({ user, onLogout, activeTab, setActiveTab }) => (
 );
 
 const UserLoginContent = ({ onLoginSuccess }) => {
+  const [view, setView] = useState('choice'); // 'choice', 'signin', 'signup'
   const [processing, setProcessing] = useState(false);
 
   const login = useGoogleLogin({
@@ -71,19 +72,40 @@ const UserLoginContent = ({ onLoginSuccess }) => {
         <div className="floating" style={{ display: 'inline-block', marginBottom: '20px' }}>
           <Ghost size={60} strokeWidth={2.5} />
         </div>
-        <h1 style={{ fontSize: '2.5rem', fontWeight: 900, marginBottom: '10px' }}>GhostDocs</h1>
-        <p style={{ marginBottom: '30px', fontWeight: 700, fontSize: '1.1rem', opacity: 0.7 }}>
-          Enter the portal
-        </p>
+        <h1 style={{ fontSize: '2.5rem', fontWeight: 900, marginBottom: '30px' }}>GhostDocs</h1>
         
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <button className="neo-button" style={{ background: 'white', justifyContent: 'center', padding: '16px', fontSize: '1.1rem' }} onClick={() => login()} disabled={processing}>
-            <img src="https://www.google.com/favicon.ico" style={{ width: '20px' }} alt="Google" /> Continue with Google
-          </button>
-          <button className="neo-button" style={{ background: '#000', color: 'white', border: 'none', justifyContent: 'center', padding: '16px', fontSize: '1.1rem' }} onClick={loginWithGithub} disabled={processing}>
-            <Users size={20} /> Continue with GitHub
-          </button>
-        </div>
+        <AnimatePresence mode="wait">
+          {view === 'choice' ? (
+            <motion.div key="choice" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <button className="neo-button" style={{ background: 'var(--primary)', justifyContent: 'center', padding: '16px', fontSize: '1.1rem' }} onClick={() => setView('signin')}>
+                Sign In
+              </button>
+              <button className="neo-button" style={{ background: 'var(--accent)', justifyContent: 'center', padding: '16px', fontSize: '1.1rem' }} onClick={() => setView('signup')}>
+                Sign Up
+              </button>
+            </motion.div>
+          ) : (
+            <motion.div key="oauth" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
+              <p style={{ marginBottom: '24px', fontWeight: 700, fontSize: '1.1rem', opacity: 0.7 }}>
+                {view === 'signup' ? 'Create your account' : 'Welcome back'}
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <button className="neo-button" style={{ background: 'white', justifyContent: 'center', padding: '16px', fontSize: '1.1rem' }} onClick={() => login()} disabled={processing}>
+                  <img src="https://www.google.com/favicon.ico" style={{ width: '20px' }} alt="Google" /> Continue with Google
+                </button>
+                <button className="neo-button" style={{ background: '#000', color: 'white', border: 'none', justifyContent: 'center', padding: '16px', fontSize: '1.1rem' }} onClick={loginWithGithub} disabled={processing}>
+                  <Users size={20} /> Continue with GitHub
+                </button>
+              </div>
+              <button 
+                onClick={() => setView('choice')}
+                style={{ marginTop: '24px', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: '0.8rem', opacity: 0.5 }}
+              >
+                ← Back to options
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </motion.div>
     </div>
   );
