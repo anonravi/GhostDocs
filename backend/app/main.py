@@ -161,7 +161,7 @@ async def login(req: dict, db: Session = Depends(database.get_db)):
 @app.post("/auth/google")
 async def google_auth(req: dict, db: Session = Depends(database.get_db)):
     if not req:
-        return JSONResponse(status_code=400, content={"detail": "Empty request body"})
+        return JSONResponse(status_code=400, content={"detail": "Ghost request"})
     
     print(f"DEBUG: Google Auth Req Body: {req}")
     token = req.get("token") or req.get("credential")
