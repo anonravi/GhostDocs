@@ -53,13 +53,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.on_event("startup")
-def on_startup():
-    database.init_db()
+# Initialize Database Tables
+models.Base.metadata.create_all(bind=database.engine)
 
 @app.get("/health")
-async def health():
-    return {"status": "healthy", "alive": True}
+async def health(db: Session = Depends(database.get_db)):
+    try:
+        db.query(models.User).count()
+        db_status = "connected"
+    except Exception as e:
+        db_status = f"error: {str(e)}"
+    return {"status": "healthy", "database": db_status}
 
 @app.post("/generate", response_model=schemas.JobResponse)
 async def generate_docs(payload: schemas.GenerateRequest, user: models.User = Depends(get_current_user), db: Session = Depends(database.get_db)):
