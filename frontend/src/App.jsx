@@ -121,7 +121,7 @@ const UserLogin = ({ onLoginSuccess }) => (
 function Dashboard({ user, onLogout }) {
   const [jobs, setJobs] = useState([]);
   const [users, setUsers] = useState([]);
-  const [repo, setRepo] = useState('anonravi/Echo');
+  const [repo, setRepo] = useState('');
   const [sha, setSha] = useState('main');
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
