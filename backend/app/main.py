@@ -208,28 +208,34 @@ async def github_auth(data: dict, db: Session = Depends(database.get_db)):
     code = data.get("code")
     import httpx
     # Get token from GitHub
-    async with httpx.AsyncClient() as client:
-        res = await client.post("https://github.com/login/oauth/access_token", headers={"Accept": "application/json"}, data={
-            "client_id": os.getenv("GITHUB_CLIENT_ID"),
-            "client_secret": os.getenv("GITHUB_CLIENT_SECRET"),
-            "code": code
-        })
-        gh_token = res.json().get("access_token")
-        if not gh_token: raise HTTPException(401, "Invalid GitHub Code")
+    try:
+        async with httpx.AsyncClient() as client:
+            res = await client.post("https://github.com/login/oauth/access_token", headers={"Accept": "application/json"}, data={
+                "client_id": os.getenv("GITHUB_CLIENT_ID"),
+                "client_secret": os.getenv("GITHUB_CLIENT_SECRET"),
+                "code": code
+            })
+            gh_token = res.json().get("access_token")
+            if not gh_token: raise HTTPException(401, f"Invalid GitHub Code or missing secrets: {res.text}")
 
-        # Get user info
-        res = await client.get("https://api.github.com/user", headers={"Authorization": f"Bearer {gh_token}"})
-        gh_user = res.json()
-        email = gh_user.get("email") or f"{gh_user['login']}@github.com"
-        
-        user = db.query(models.User).filter(models.User.email == email).first()
-        if not user:
-            user = models.User(email=email, full_name=gh_user.get("name", gh_user["login"]))
-            db.add(user)
-        
-        user.github_token = gh_token
-        db.commit()
-        db.refresh(user)
+            # Get user info
+            res = await client.get("https://api.github.com/user", headers={"Authorization": f"Bearer {gh_token}"})
+            gh_user = res.json()
+            email = gh_user.get("email") or f"{gh_user.get('login', 'unknown')}@github.com"
+            
+            user = db.query(models.User).filter(models.User.email == email).first()
+            if not user:
+                is_first = db.query(models.User).count() == 0
+                user = models.User(email=email, full_name=gh_user.get("name", gh_user.get("login")), is_admin=1 if is_first else 0)
+                db.add(user)
+            
+            user.github_token = gh_token
+            db.commit()
+            db.refresh(user)
+    except httpx.RequestError as e:
+        raise HTTPException(500, f"Failed to connect to GitHub: {str(e)}")
+    except Exception as e:
+        raise HTTPException(500, f"GitHub Auth Error: {str(e)}")
         
     if not user.is_active: raise HTTPException(status_code=403, detail="Banned")
     
@@ -247,16 +253,21 @@ async def github_auth(data: dict, db: Session = Depends(database.get_db)):
 async def connect_github(data: dict, user: models.User = Depends(get_current_user), db: Session = Depends(database.get_db)):
     code = data.get("code")
     import httpx
-    async with httpx.AsyncClient() as client:
-        res = await client.post("https://github.com/login/oauth/access_token", headers={"Accept": "application/json"}, data={
-            "client_id": os.getenv("GITHUB_CLIENT_ID"),
-            "client_secret": os.getenv("GITHUB_CLIENT_SECRET"),
-            "code": code
-        })
-        gh_token = res.json().get("access_token")
-        if not gh_token: raise HTTPException(401, "Invalid GitHub Code")
-        
-        user.github_token = gh_token
-        db.commit()
+    try:
+        async with httpx.AsyncClient() as client:
+            res = await client.post("https://github.com/login/oauth/access_token", headers={"Accept": "application/json"}, data={
+                "client_id": os.getenv("GITHUB_CLIENT_ID"),
+                "client_secret": os.getenv("GITHUB_CLIENT_SECRET"),
+                "code": code
+            })
+            gh_token = res.json().get("access_token")
+            if not gh_token: raise HTTPException(401, f"Invalid GitHub Code or missing secrets: {res.text}")
+            
+            user.github_token = gh_token
+            db.commit()
+    except httpx.RequestError as e:
+        raise HTTPException(500, f"Failed to connect to GitHub: {str(e)}")
+    except Exception as e:
+        raise HTTPException(500, f"GitHub Connect Error: {str(e)}")
         
     return {"status": "connected", "has_github": True}
