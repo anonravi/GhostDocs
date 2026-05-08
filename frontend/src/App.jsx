@@ -6,9 +6,9 @@ import { Send, RefreshCw, ExternalLink, Ghost, AlertCircle, CheckCircle2, Clock,
 import { GoogleOAuthProvider, useGoogleLogin, googleLogout } from '@react-oauth/google';
 import './index.css';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
-const GOOGLE_CLIENT_ID = "703431618953-ems9fk5tg7rdlskf7vkop8usnqujre35.apps.googleusercontent.com";
-const GITHUB_CLIENT_ID = import.meta.env.VITE_GITHUB_CLIENT_ID;
+const API_URL = import.meta.env.VITE_API_URL || 'https://ghostdocs-backend.onrender.com';
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '703431618953-ems9fk5tg7rdlskf7vkop8usnqujre35.apps.googleusercontent.com';
+const GITHUB_CLIENT_ID = import.meta.env.VITE_GITHUB_CLIENT_ID || 'Ov23liQl9MQxnrasYDXF';
 
 axios.interceptors.request.use(config => {
   const token = localStorage.getItem('token');
