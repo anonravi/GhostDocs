@@ -1,99 +1,114 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Space+Grotesk:wght@500;700&display=swap');
-
 :root {
-  --primary: #a3e3ff;
-  --secondary: #d1ffcc;
-  --accent: #fff4a3;
+  --primary: #bc95ff;
+  --secondary: #ffb3b3;
+  --accent: #95ffb3;
   --bg: #ffffff;
-  --text: #1a1a1a;
+  --text: #000000;
   --border: #000000;
-  --shadow-offset: 4px;
-  --shadow: var(--shadow-offset) var(--shadow-offset) 0px #000;
-  --shadow-hover: 2px 2px 0px #000;
+  --shadow: #000000;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
 }
 
 body {
-  margin: 0;
-  font-family: 'Inter', -apple-system, sans-serif;
   background-color: var(--bg);
   color: var(--text);
-  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
 }
 
-h1, h2, h3, h4 {
-  font-family: 'Space Grotesk', sans-serif;
-  font-weight: 700;
-  margin: 0;
-}
-
+/* Neobrutalist Utility Classes */
 .neo-card {
   background: white;
-  border: 2px solid var(--border);
-  box-shadow: var(--shadow);
+  border: 3px solid var(--border);
+  box-shadow: 4px 4px 0px var(--shadow);
   padding: 24px;
-  border-radius: 4px;
-  transition: all 0.2s ease;
-}
-
-.neo-card:hover {
-  transform: translate(2px, 2px);
-  box-shadow: var(--shadow-hover);
+  margin-bottom: 24px;
+  transition: transform 0.1s ease;
 }
 
 .neo-button {
-  background: var(--primary);
-  border: 2px solid var(--border);
-  box-shadow: var(--shadow);
-  padding: 12px 24px;
-  font-weight: 700;
-  font-family: 'Space Grotesk', sans-serif;
-  cursor: pointer;
-  transition: all 0.1s ease;
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  border-radius: 4px;
+  background: white;
+  border: 3px solid var(--border);
+  box-shadow: 3px 3px 0px var(--shadow);
+  padding: 10px 20px;
+  font-weight: 800;
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: all 0.1s ease;
 }
 
 .neo-button:active {
-  transform: translate(var(--shadow-offset), var(--shadow-offset));
-  box-shadow: 0 0 0 #000;
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0px var(--shadow);
+}
+
+.neo-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .neo-input {
   width: 100%;
+  border: 3px solid var(--border);
   padding: 12px;
-  border: 2px solid var(--border);
-  font-family: 'Inter', sans-serif;
   font-size: 1rem;
-  box-sizing: border-box;
-  border-radius: 4px;
+  font-weight: 600;
+  outline: none;
 }
 
 .neo-input:focus {
-  outline: none;
-  background: #f8f8f8;
+  background: #f0f0f0;
 }
 
-.status-badge {
-  padding: 4px 12px;
-  border: 2px solid var(--border);
-  font-weight: 700;
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  border-radius: 100px;
+/* Responsiveness */
+.container {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 20px;
 }
 
-.status-completed { background: var(--secondary); }
-.status-processing { background: var(--primary); }
-.status-pending { background: var(--accent); }
-.status-failed { background: #ffb3b3; }
+@media (max-width: 768px) {
+  .navbar-header {
+    flex-direction: column;
+    align-items: flex-start !important;
+    gap: 20px;
+  }
+  
+  .navbar-actions {
+    width: 100%;
+    justify-content: space-between !important;
+    flex-wrap: wrap;
+    gap: 10px !important;
+  }
+  
+  .dashboard-grid {
+    grid-template-columns: 1fr !important;
+  }
+  
+  .login-card {
+    width: 90% !important;
+    padding: 30px !important;
+  }
 
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  table {
+    display: block;
+    overflow-x: auto;
+  }
 }
 
 .spinner {
   animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
