@@ -338,13 +338,6 @@ function MainApp() {
     }
   }, []);
 
-  const handleGoogleSuccess = async (res) => {
-    try {
-      const { data } = await axios.post(`${API_URL}/auth/google`, { token: res.credential });
-      loginSuccess(data);
-    } catch (e) { alert("Auth failed"); }
-  };
-
   const handleLogout = () => {
     googleLogout();
     localStorage.clear();
@@ -356,7 +349,7 @@ function MainApp() {
     <>
       <Routes>
         <Route path="/admin" element={<AdminLogin onAdminLogin={loginSuccess} />} />
-        <Route path="/" element={user ? <Dashboard user={user} onLogout={handleLogout} /> : <UserLogin onLoginSuccess={handleGoogleSuccess} />} />
+        <Route path="/" element={user ? <Dashboard user={user} onLogout={handleLogout} /> : <UserLogin onLoginSuccess={loginSuccess} />} />
       </Routes>
       <Footer />
     </>
