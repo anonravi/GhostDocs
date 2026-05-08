@@ -160,6 +160,7 @@ async def login(req: dict, db: Session = Depends(database.get_db)):
 
 @app.post("/auth/google")
 async def google_auth(req: dict, db: Session = Depends(database.get_db)):
+    print(f"DEBUG: Google Auth Req Body: {req}")
     token = req.get("token") or req.get("credential")
     if not token:
         raise HTTPException(400, "Token is missing from request")
