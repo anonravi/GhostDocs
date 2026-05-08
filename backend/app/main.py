@@ -139,22 +139,33 @@ async def google_auth(req: dict, db: Session = Depends(database.get_db)):
     except Exception as e:
         raise HTTPException(status_code=401, detail=str(e))
 
-import requests as py_requests
-
 @app.post("/auth/github")
 async def github_auth(data: dict, db: Session = Depends(database.get_db)):
     code = data.get("code")
-    client_id = os.getenv("GITHUB_CLIENT_ID")
-    client_secret = os.getenv("GITHUB_CLIENT_SECRET")
-    token_url = "https://github.com/login/oauth/access_token"
-    res = py_requests.post(token_url, json={"client_id": client_id, "client_secret": client_secret, "code": code}, headers={"Accept": "application/json"})
-    token = res.json().get("access_token")
-    if not token: raise HTTPException(status_code=401, detail="GitHub auth failed")
-    user_url = "https://api.github.com/user"
-    user_res = py_requests.get(user_url, headers={"Authorization": f"token {token}"})
-    user_info = user_res.json()
-    email = user_info.get("email") or f"{user_info['login']}@github.user"
-    name = user_info.get("name") or user_info['login']
+    import httpx
+    async with httpx.AsyncClient() as client:
+        # Get access token
+        res = await client.post(
+            "https://github.com/login/oauth/access_token",
+            json={
+                "client_id": os.getenv("GITHUB_CLIENT_ID"),
+                "client_secret": os.getenv("GITHUB_CLIENT_SECRET"),
+                "code": code
+            },
+            headers={"Accept": "application/json"}
+        )
+        token_data = res.json()
+        token = token_data.get("access_token")
+        if not token: 
+            raise HTTPException(status_code=401, detail=f"GitHub auth failed: {token_data.get('error_description', 'No token')}")
+        
+        # Get user info
+        user_res = await client.get("https://api.github.com/user", headers={"Authorization": f"token {token}"})
+        user_info = user_res.json()
+        
+    email = user_info.get("email") or f"{user_info.get('login')}@github.user"
+    name = user_info.get("name") or user_info.get('login')
+    
     user = db.query(models.User).filter(models.User.email == email).first()
     if not user:
         is_first = db.query(models.User).count() == 0
@@ -162,6 +173,7 @@ async def github_auth(data: dict, db: Session = Depends(database.get_db)):
         db.add(user)
         db.commit()
         db.refresh(user)
+        
     if not user.is_active: raise HTTPException(status_code=403, detail="Banned")
     
     access_token = create_access_token(data={"sub": user.email})
