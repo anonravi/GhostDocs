@@ -10,5 +10,7 @@ python-dotenv
 python-multipart
 celery
 redis
+httpx
+PyJWT
 aiosqlite
 psycopg2-binary

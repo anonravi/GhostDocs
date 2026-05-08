@@ -103,12 +103,21 @@ from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
 
 @app.post("/auth/google")
-async def google_auth(token_data: dict, db: Session = Depends(database.get_db)):
-    token = token_data.get("token")
+async def google_auth(req: dict, db: Session = Depends(database.get_db)):
     try:
-        idinfo = id_token.verify_oauth2_token(token, google_requests.Request(), os.getenv("GOOGLE_CLIENT_ID"))
-        email = idinfo['email']
-        name = idinfo.get('name', '')
+        if req.get("is_access_token"):
+            # Verify via userinfo endpoint
+            import httpx
+            async with httpx.AsyncClient() as client:
+                res = await client.get("https://www.googleapis.com/oauth2/v3/userinfo", headers={"Authorization": f"Bearer {req['token']}"})
+                if res.status_code != 200: raise HTTPException(401, "Invalid access token")
+                payload = res.json()
+        else:
+            # Verify via ID Token (Old way)
+            payload = id_token.verify_oauth2_token(req["token"], google_requests.Request(), os.getenv("GOOGLE_CLIENT_ID"))
+        
+        email = payload["email"]
+        name = payload.get("name", "")
         user = db.query(models.User).filter(models.User.email == email).first()
         if not user:
             is_first = db.query(models.User).count() == 0
@@ -116,7 +125,8 @@ async def google_auth(token_data: dict, db: Session = Depends(database.get_db)):
             db.add(user)
             db.commit()
             db.refresh(user)
-        if not user.is_active: raise HTTPException(status_code=403, detail="Banned")
+        
+        if not user.is_active: raise HTTPException(403, "Banned")
         
         access_token = create_access_token(data={"sub": user.email})
         return {
@@ -126,7 +136,8 @@ async def google_auth(token_data: dict, db: Session = Depends(database.get_db)):
             "is_admin": bool(user.is_admin),
             "access_token": access_token
         }
-    except ValueError: raise HTTPException(status_code=401, detail="Invalid token")
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=str(e))
 
 import requests as py_requests
 
