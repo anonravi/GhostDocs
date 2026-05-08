@@ -120,14 +120,18 @@ from google.auth.transport import requests as google_requests
 
 @app.post("/auth/google")
 async def google_auth(req: dict, db: Session = Depends(database.get_db)):
+    token = req.get("token") or req.get("credential")
+    if not token:
+        raise HTTPException(400, "Token is missing from request")
+    
     if req.get("is_access_token"):
         import httpx
         async with httpx.AsyncClient() as client:
-            res = await client.get("https://www.googleapis.com/oauth2/v3/userinfo", headers={"Authorization": f"Bearer {req['token']}"})
+            res = await client.get("https://www.googleapis.com/oauth2/v3/userinfo", headers={"Authorization": f"Bearer {token}"})
             if res.status_code != 200: raise HTTPException(401, "Invalid Google Access Token")
             payload = res.json()
     else:
-        payload = id_token.verify_oauth2_token(req["token"], google_requests.Request(), os.getenv("GOOGLE_CLIENT_ID"))
+        payload = id_token.verify_oauth2_token(token, google_requests.Request(), os.getenv("GOOGLE_CLIENT_ID"))
     
     email = payload["email"]
     name = payload.get("name", "")
