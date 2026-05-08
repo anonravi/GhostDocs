@@ -8,5 +8,7 @@ google-generativeai
 PyGithub
 python-dotenv
 python-multipart
+celery
+redis
 aiosqlite
 psycopg2-binary
