@@ -53,17 +53,27 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from fastapi.responses import JSONResponse
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request, exc):
+    logger.error(f"Global Error: {str(exc)}", exc_info=True)
+    return JSONResponse(
+        status_code=getattr(exc, "status_code", 500),
+        content={"detail": str(exc) or "Internal Ghost Error"},
+    )
+
 # Initialize Database Tables
 models.Base.metadata.create_all(bind=database.engine)
 
 @app.get("/health")
 async def health(db: Session = Depends(database.get_db)):
-    try:
-        db.query(models.User).count()
-        db_status = "connected"
-    except Exception as e:
-        db_status = f"error: {str(e)}"
-    return {"status": "healthy", "database": db_status}
+    db.query(models.User).count()
+    return {"status": "healthy", "database": "connected"}
 
 @app.post("/generate", response_model=schemas.JobResponse)
 async def generate_docs(payload: schemas.GenerateRequest, user: models.User = Depends(get_current_user), db: Session = Depends(database.get_db)):
@@ -110,41 +120,35 @@ from google.auth.transport import requests as google_requests
 
 @app.post("/auth/google")
 async def google_auth(req: dict, db: Session = Depends(database.get_db)):
-    try:
-        if req.get("is_access_token"):
-            # Verify via userinfo endpoint
-            import httpx
-            async with httpx.AsyncClient() as client:
-                res = await client.get("https://www.googleapis.com/oauth2/v3/userinfo", headers={"Authorization": f"Bearer {req['token']}"})
-                if res.status_code != 200: raise HTTPException(401, "Invalid access token")
-                payload = res.json()
-        else:
-            # Verify via ID Token (Old way)
-            payload = id_token.verify_oauth2_token(req["token"], google_requests.Request(), os.getenv("GOOGLE_CLIENT_ID"))
-        
-        email = payload["email"]
-        name = payload.get("name", "")
-        user = db.query(models.User).filter(models.User.email == email).first()
-        if not user:
-            is_first = db.query(models.User).count() == 0
-            user = models.User(email=email, full_name=name, is_admin=1 if is_first else 0)
-            db.add(user)
-            db.commit()
-            db.refresh(user)
-        
-        if not user.is_active: raise HTTPException(403, "Banned")
-        
-        access_token = create_access_token(data={"sub": user.email})
-        return {
-            "id": user.id, 
-            "email": user.email, 
-            "name": user.full_name, 
-            "is_admin": bool(user.is_admin),
-            "access_token": access_token
-        }
-    except Exception as e:
-        print(f"AUTH ERROR: {str(e)}")
-        raise HTTPException(status_code=401, detail=str(e))
+    if req.get("is_access_token"):
+        import httpx
+        async with httpx.AsyncClient() as client:
+            res = await client.get("https://www.googleapis.com/oauth2/v3/userinfo", headers={"Authorization": f"Bearer {req['token']}"})
+            if res.status_code != 200: raise HTTPException(401, "Invalid Google Access Token")
+            payload = res.json()
+    else:
+        payload = id_token.verify_oauth2_token(req["token"], google_requests.Request(), os.getenv("GOOGLE_CLIENT_ID"))
+    
+    email = payload["email"]
+    name = payload.get("name", "")
+    user = db.query(models.User).filter(models.User.email == email).first()
+    if not user:
+        is_first = db.query(models.User).count() == 0
+        user = models.User(email=email, full_name=name, is_admin=1 if is_first else 0)
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+    
+    if not user.is_active: raise HTTPException(403, "Your account is banned")
+    
+    access_token = create_access_token(data={"sub": user.email})
+    return {
+        "id": user.id, 
+        "email": user.email, 
+        "name": user.full_name, 
+        "is_admin": bool(user.is_admin),
+        "access_token": access_token
+    }
 
 @app.post("/auth/github")
 async def github_auth(data: dict, db: Session = Depends(database.get_db)):
