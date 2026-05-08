@@ -143,6 +143,7 @@ async def google_auth(req: dict, db: Session = Depends(database.get_db)):
             "access_token": access_token
         }
     except Exception as e:
+        print(f"AUTH ERROR: {str(e)}")
         raise HTTPException(status_code=401, detail=str(e))
 
 @app.post("/auth/github")
