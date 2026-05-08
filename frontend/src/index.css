@@ -19,6 +19,18 @@ body {
   background-color: var(--bg);
   color: var(--text);
   overflow-x: hidden;
+  background-image: radial-gradient(#00000010 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+@keyframes float {
+  0% { transform: translateY(0px); }
+  50% { transform: translateY(-20px); }
+  100% { transform: translateY(0px); }
+}
+
+.floating {
+  animation: float 3s ease-in-out infinite;
 }
 
 /* Neobrutalist Utility Classes */

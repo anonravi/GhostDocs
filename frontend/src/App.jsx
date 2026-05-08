@@ -39,18 +39,56 @@ const Navbar = ({ user, onLogout, activeTab, setActiveTab }) => (
 
 const UserLogin = ({ onLoginSuccess }) => (
   <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fff', padding: '20px' }}>
-      <div className="neo-card login-card" style={{ textAlign: 'center', width: '100%', maxWidth: '400px' }}>
-        <Ghost size={60} style={{ marginBottom: '20px' }} />
-        <h1 style={{ marginBottom: '10px' }}>GhostDocs</h1>
-        <p style={{ marginBottom: '40px', opacity: 0.7 }}>Secure AI Documentation</p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <GoogleLogin onSuccess={onLoginSuccess} onError={() => alert('Login Failed')} width="100%" />
-          <button className="neo-button" style={{ background: '#1a1a1a', color: 'white', border: 'none', justifyContent: 'center' }} onClick={loginWithGithub}>
-            <Users size={18} /> Sign in with GitHub
-          </button>
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+      <motion.div 
+        initial={{ scale: 0.8, opacity: 0, rotate: -2 }}
+        animate={{ scale: 1, opacity: 1, rotate: 0 }}
+        transition={{ type: "spring", damping: 12 }}
+        className="neo-card login-card" 
+        style={{ textAlign: 'center', width: '100%', maxWidth: '420px', padding: '50px 30px' }}
+      >
+        <div className="floating" style={{ display: 'inline-block', marginBottom: '30px' }}>
+          <Ghost size={80} strokeWidth={2.5} />
         </div>
-      </div>
+        <motion.h1 
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.2 }}
+          style={{ fontSize: '3rem', fontWeight: 900, marginBottom: '10px' }}
+        >
+          GhostDocs
+        </motion.h1>
+        <motion.p 
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.3 }}
+          style={{ marginBottom: '40px', fontSize: '1.1rem', fontWeight: 600, opacity: 0.7 }}
+        >
+          Autonomous AI Documentation Agent
+        </motion.p>
+        <motion.div 
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.4 }}
+          style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}
+        >
+          <div style={{ border: '3px solid black', boxShadow: '4px 4px 0 black' }}>
+            <GoogleLogin onSuccess={onLoginSuccess} onError={() => alert('Login Failed')} width="100%" />
+          </div>
+          <button className="neo-button" style={{ background: '#000', color: 'white', border: 'none', justifyContent: 'center', padding: '15px' }} onClick={loginWithGithub}>
+            <Users size={18} /> Continue with GitHub
+          </button>
+        </motion.div>
+        
+        <motion.div 
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.8 }}
+          style={{ marginTop: '30px', fontSize: '0.8rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--primary)' }}
+        >
+          ✨ Documentation, Automagically.
+        </motion.div>
+      </motion.div>
     </div>
   </GoogleOAuthProvider>
 );
