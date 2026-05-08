@@ -257,6 +257,12 @@ function Dashboard({ user, onLogout }) {
   );
 }
 
+const Footer = () => (
+  <footer style={{ textAlign: 'center', padding: '40px 20px', opacity: 0.6, fontSize: '0.9rem', fontWeight: 700 }}>
+    © {new Date().getFullYear()} Ravi Yadav @ Shoolini University GF202218734
+  </footer>
+);
+
 function MainApp() {
   const [user, setUser] = useState(() => JSON.parse(localStorage.getItem('user')));
   const navigate = useNavigate();
@@ -299,10 +305,13 @@ function MainApp() {
   };
 
   return (
-    <Routes>
-      <Route path="/admin" element={<AdminLogin onAdminLogin={loginSuccess} />} />
-      <Route path="/" element={user ? <Dashboard user={user} onLogout={handleLogout} /> : <UserLogin onLoginSuccess={handleGoogleSuccess} />} />
-    </Routes>
+    <>
+      <Routes>
+        <Route path="/admin" element={<AdminLogin onAdminLogin={loginSuccess} />} />
+        <Route path="/" element={user ? <Dashboard user={user} onLogout={handleLogout} /> : <UserLogin onLoginSuccess={handleGoogleSuccess} />} />
+      </Routes>
+      <Footer />
+    </>
   );
 }
 
