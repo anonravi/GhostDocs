@@ -77,6 +77,9 @@ async def health(db: Session = Depends(database.get_db)):
 
 @app.post("/generate", response_model=schemas.JobResponse)
 async def generate_docs(payload: schemas.GenerateRequest, user: models.User = Depends(get_current_user), db: Session = Depends(database.get_db)):
+    # Use user's token if available, otherwise fallback to global
+    gh_token = user.github_token or os.getenv("GITHUB_TOKEN")
+    
     job_id = str(uuid.uuid4())
     db_job = models.Job(
         id=job_id,
@@ -87,7 +90,7 @@ async def generate_docs(payload: schemas.GenerateRequest, user: models.User = De
     db.add(db_job)
     db.commit()
     db.refresh(db_job)
-    process_docs_task.delay(job_id, payload.repo_name, payload.commit_sha)
+    process_docs_task.delay(job_id, payload.repo_name, payload.commit_sha, gh_token)
     return db_job
 
 @app.get("/jobs", response_model=List[schemas.JobResponse])
@@ -202,34 +205,27 @@ async def google_auth(req: dict, db: Session = Depends(database.get_db)):
 async def github_auth(data: dict, db: Session = Depends(database.get_db)):
     code = data.get("code")
     import httpx
+    # Get token from GitHub
     async with httpx.AsyncClient() as client:
-        # Get access token
-        res = await client.post(
-            "https://github.com/login/oauth/access_token",
-            json={
-                "client_id": os.getenv("GITHUB_CLIENT_ID"),
-                "client_secret": os.getenv("GITHUB_CLIENT_SECRET"),
-                "code": code
-            },
-            headers={"Accept": "application/json"}
-        )
-        token_data = res.json()
-        token = token_data.get("access_token")
-        if not token: 
-            raise HTTPException(status_code=401, detail=f"GitHub auth failed: {token_data.get('error_description', 'No token')}")
-        
+        res = await client.post("https://github.com/login/oauth/access_token", headers={"Accept": "application/json"}, data={
+            "client_id": os.getenv("GITHUB_CLIENT_ID"),
+            "client_secret": os.getenv("GITHUB_CLIENT_SECRET"),
+            "code": code
+        })
+        gh_token = res.json().get("access_token")
+        if not gh_token: raise HTTPException(401, "Invalid GitHub Code")
+
         # Get user info
-        user_res = await client.get("https://api.github.com/user", headers={"Authorization": f"token {token}"})
-        user_info = user_res.json()
+        res = await client.get("https://api.github.com/user", headers={"Authorization": f"Bearer {gh_token}"})
+        gh_user = res.json()
+        email = gh_user.get("email") or f"{gh_user['login']}@github.com"
         
-    email = user_info.get("email") or f"{user_info.get('login')}@github.user"
-    name = user_info.get("name") or user_info.get('login')
-    
-    user = db.query(models.User).filter(models.User.email == email).first()
-    if not user:
-        is_first = db.query(models.User).count() == 0
-        user = models.User(email=email, full_name=name, is_admin=1 if is_first else 0)
-        db.add(user)
+        user = db.query(models.User).filter(models.User.email == email).first()
+        if not user:
+            user = models.User(email=email, full_name=gh_user.get("name", gh_user["login"]))
+            db.add(user)
+        
+        user.github_token = gh_token
         db.commit()
         db.refresh(user)
         

@@ -11,6 +11,7 @@ class User(Base):
     email = Column(String, unique=True, index=True)
     full_name = Column(String)
     hashed_password = Column(String, nullable=True)
+    github_token = Column(String, nullable=True)
     is_admin = Column(Integer, default=0) # 0 for user, 1 for admin
     is_active = Column(Integer, default=1)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)

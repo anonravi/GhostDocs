@@ -1,29 +1,32 @@
-# 👻 GhostDocs
+# 👻 GhostDocs: Autonomous AI Documentation Agent
 
-**GhostDocs** is an autonomous AI documentation agent that generates professional READMEs, API documentation, and architectural diagrams for your GitHub repositories automatically.
+GhostDocs is a production-ready AI platform that automatically generates high-quality READMEs, API documentation, and architecture diagrams for your GitHub repositories. Powered by **Gemini 1.5 Flash**, it integrates directly into your workflow via Pull Requests.
 
-## 🚀 Features
+## 🚀 Key Features
+- **Multi-Tenant OAuth**: Securely connect with Google or GitHub.
+- **Autonomous Documentation**: Scans your codebase using AST parsing and generates context-aware docs.
+- **Automated PRs**: Directly creates documentation Pull Requests in your repository.
+- **Neobrutalist UI**: A high-performance, responsive interface built with React and Framer Motion.
+- **Asynchronous Processing**: Background tasks managed by Celery and Redis for horizontal scaling.
 
-- **AST-Powered Parsing**: Understands Python, JS, TS, and HTML structures.
-- **Gemini 1.5 Flash**: High-speed, high-context AI generation.
-- **Automatic PRs**: Creates branches and submits documentation PRs directly.
-- **Neobrutalist Dashboard**: Sleek, minimalist UI for managing jobs.
-- **Role-Based Access**: Secure Admin panel for user management.
-- **Multi-Auth**: Sign in with Google or GitHub.
+## 🛠️ Technology Stack
+- **Frontend**: React (Vite), Framer Motion, Axios.
+- **Backend**: FastAPI (Python), SQLAlchemy, SQLite.
+- **Worker**: Celery, Redis.
+- **AI**: Google Gemini 1.5 Flash.
+- **Deployment**: Render (Backend/Worker), Cloudflare Pages (Frontend).
 
-## 🛠 Tech Stack
-
-- **Backend**: FastAPI, SQLAlchemy, Celery, Redis.
-- **Frontend**: Vite + React, Framer Motion, Lucide Icons.
-- **AI**: Google Gemini.
-- **Deployment**: Fly.io (Backend), Vercel (Frontend).
-
-## 📦 Installation
+## 📦 Local Setup
 
 ### Backend
 1. `cd backend`
 2. `pip install -r requirements.txt`
-3. Configure `.env` (GITHUB_TOKEN, GEMINI_API_KEY, etc.)
+3. Create `.env` with:
+   - `GEMINI_API_KEY`
+   - `GITHUB_CLIENT_ID`
+   - `GITHUB_CLIENT_SECRET`
+   - `GOOGLE_CLIENT_ID`
+   - `REDIS_URL`
 4. `uvicorn app.main:app --reload`
 
 ### Frontend
@@ -31,12 +34,10 @@
 2. `npm install`
 3. `npm run dev`
 
-## 🛡 Security
+## 🛡️ Security
+- JWT-based session management.
+- Multi-user data isolation (each user uses their own GitHub token).
+- Secure password hashing with Bcrypt.
 
-- JWT-based authentication.
-- Hidden admin portal (`/admin`).
-- Role-based endpoint protection.
-
----
-Built with 🦴 by **GhostDocs Team**.
-.
+## 📜 License
+© 2026 Ravi Yadav @ Shoolini University GF202218734. All rights reserved.

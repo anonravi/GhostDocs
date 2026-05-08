@@ -12,9 +12,12 @@ celery.conf.broker_url = REDIS_URL
 celery.conf.result_backend = REDIS_URL
 
 @celery.task(name="process_docs_task")
-def process_docs_task(job_id: str, repo_name: str, commit_sha: str):
+def process_docs_task(job_id: str, repo_name: str, commit_sha: str, gh_token: str = None):
     db = database.SessionLocal()
     job = db.query(models.Job).filter(models.Job.id == job_id).first()
+    
+    # Fallback to global token if user's token is missing
+    token = gh_token or os.getenv("GITHUB_TOKEN")
     
     if not job:
         db.close()
@@ -26,7 +29,7 @@ def process_docs_task(job_id: str, repo_name: str, commit_sha: str):
 
         # 1. Clone Repo
         temp_dir = f"/tmp/ghostdocs-{job_id}"
-        repo_url = f"https://x-access-token:{os.getenv('GITHUB_TOKEN')}@github.com/{repo_name}.git"
+        repo_url = f"https://x-access-token:{token}@github.com/{repo_name}.git"
         subprocess.run(["git", "clone", repo_url, temp_dir], check=True)
         subprocess.run(["git", "checkout", commit_sha], cwd=temp_dir, check=True)
 

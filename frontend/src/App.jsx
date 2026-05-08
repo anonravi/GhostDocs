@@ -318,6 +318,51 @@ const Footer = () => (
   </footer>
 );
 
+const LandingPage = () => {
+  const navigate = useNavigate();
+  return (
+    <div style={{ minHeight: '100vh', padding: '40px 20px' }}>
+      <nav style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', maxWidth: '1200px', margin: '0 auto 80px auto' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 900, fontSize: '1.5rem' }}>
+          <Ghost size={32} /> GhostDocs
+        </div>
+        <button className="neo-button" onClick={() => navigate('/login')}>Get Started</button>
+      </nav>
+
+      <div style={{ maxWidth: '1200px', margin: '0 auto', textAlign: 'center' }}>
+        <motion.h1 
+          initial={{ y: 30, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
+          style={{ fontSize: 'clamp(3rem, 8vw, 6rem)', fontWeight: 900, lineHeight: 1, marginBottom: '20px' }}
+        >
+          DOCUMENTATION,<br/><span style={{ color: 'var(--accent)' }}>AUTOMAGICALLY.</span>
+        </motion.h1>
+        <p style={{ fontSize: '1.5rem', opacity: 0.7, marginBottom: '40px', maxWidth: '700px', margin: '0 auto 40px auto' }}>
+          The autonomous AI agent that scans your codebase and creates perfect GitHub PRs while you sleep.
+        </p>
+        <div style={{ display: 'flex', gap: '20px', justifyContent: 'center' }}>
+          <button className="neo-button" style={{ padding: '20px 40px', fontSize: '1.2rem', background: 'var(--primary)' }} onClick={() => navigate('/login')}>
+            Deploy Ghost Agent
+          </button>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '30px', marginTop: '100px' }}>
+          {[
+            { title: 'AST Scanning', desc: 'Deep codebase analysis using Abstract Syntax Trees.', icon: <Code /> },
+            { title: 'Auto PRs', desc: 'Generates READMEs and API docs directly to GitHub.', icon: <Users /> },
+            { title: 'AI Powered', desc: 'Driven by Gemini 1.5 Flash for state-of-the-art context.', icon: <Ghost /> }
+          ].map((feat, i) => (
+            <motion.div key={i} initial={{ y: 50, opacity: 0 }} whileInView={{ y: 0, opacity: 1 }} viewport={{ once: true }} transition={{ delay: i * 0.1 }} className="neo-card" style={{ padding: '40px', textAlign: 'left' }}>
+              <div style={{ marginBottom: '20px' }}>{feat.icon}</div>
+              <h3 style={{ fontWeight: 900, fontSize: '1.5rem', marginBottom: '10px' }}>{feat.title}</h3>
+              <p style={{ opacity: 0.7 }}>{feat.desc}</p>
+            </motion.div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 function MainApp() {
   const [user, setUser] = useState(() => JSON.parse(localStorage.getItem('user')));
   const navigate = useNavigate();
@@ -326,7 +371,7 @@ function MainApp() {
     localStorage.setItem('token', data.access_token);
     localStorage.setItem('user', JSON.stringify(data));
     setUser(data);
-    navigate('/');
+    navigate('/dashboard');
   };
 
   const handleGithubCallback = async (code) => {
@@ -334,7 +379,7 @@ function MainApp() {
       const { data } = await axios.post(`${API_URL}/auth/github`, { code });
       loginSuccess(data);
     } catch (e) { 
-      alert(`GitHub Auth failed at ${API_URL}: ${e.response?.data?.detail || e.message}`); 
+      alert(`GitHub Auth failed: ${e.response?.data?.detail || e.message}`); 
     }
   };
 
@@ -357,8 +402,10 @@ function MainApp() {
   return (
     <>
       <Routes>
+        <Route path="/" element={user ? <Navigate to="/dashboard" /> : <LandingPage />} />
+        <Route path="/login" element={<UserLogin onLoginSuccess={loginSuccess} />} />
+        <Route path="/dashboard" element={user ? <Dashboard user={user} onLogout={handleLogout} /> : <Navigate to="/login" />} />
         <Route path="/admin" element={<AdminLogin onAdminLogin={loginSuccess} />} />
-        <Route path="/" element={user ? <Dashboard user={user} onLogout={handleLogout} /> : <UserLogin onLoginSuccess={loginSuccess} />} />
       </Routes>
       <Footer />
     </>
