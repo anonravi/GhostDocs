@@ -43,7 +43,9 @@ const UserLoginContent = ({ onLoginSuccess }) => {
       try {
         const { data } = await axios.post(`${API_URL}/auth/google`, { token: tokenResponse.access_token, is_access_token: true });
         onLoginSuccess(data);
-      } catch (e) { alert("Auth failed"); }
+      } catch (e) { 
+        alert(`Google Auth failed at ${API_URL}: ${e.response?.data?.detail || e.message}`); 
+      }
     },
     onError: () => alert('Login Failed')
   });
@@ -294,7 +296,9 @@ function MainApp() {
     try {
       const { data } = await axios.post(`${API_URL}/auth/github`, { code });
       loginSuccess(data);
-    } catch (e) { alert("Auth failed"); }
+    } catch (e) { 
+      alert(`GitHub Auth failed at ${API_URL}: ${e.response?.data?.detail || e.message}`); 
+    }
   };
 
   useEffect(() => {
