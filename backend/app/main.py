@@ -53,7 +53,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-database.init_db()
+@app.on_event("startup")
+def on_startup():
+    database.init_db()
 
 @app.get("/health")
 async def health():
