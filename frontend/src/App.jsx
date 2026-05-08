@@ -44,10 +44,6 @@ const Navbar = ({ user, onLogout, activeTab, setActiveTab }) => (
 );
 
 const UserLoginContent = ({ onLoginSuccess }) => {
-  const [view, setView] = useState('choice'); // 'choice', 'signin', 'signup'
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
   const [processing, setProcessing] = useState(false);
 
   const login = useGoogleLogin({
@@ -64,21 +60,6 @@ const UserLoginContent = ({ onLoginSuccess }) => {
     }
   });
 
-  const handleManualAuth = async (e) => {
-    e.preventDefault();
-    if (processing) return;
-    setProcessing(true);
-    try {
-      const endpoint = view === 'signup' ? 'register' : 'login';
-      const payload = view === 'signup' ? { email, password, name } : { email, password };
-      const { data } = await axios.post(`${API_URL}/auth/${endpoint}`, payload);
-      onLoginSuccess(data);
-    } catch (e) {
-      alert(`${view === 'signup' ? 'Sign Up' : 'Login'} failed: ${e.response?.data?.detail || e.message}`);
-      setProcessing(false);
-    }
-  };
-
   return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
       <motion.div 
@@ -90,59 +71,19 @@ const UserLoginContent = ({ onLoginSuccess }) => {
         <div className="floating" style={{ display: 'inline-block', marginBottom: '20px' }}>
           <Ghost size={60} strokeWidth={2.5} />
         </div>
-        <h1 style={{ fontSize: '2.5rem', fontWeight: 900, marginBottom: '30px' }}>GhostDocs</h1>
+        <h1 style={{ fontSize: '2.5rem', fontWeight: 900, marginBottom: '10px' }}>GhostDocs</h1>
+        <p style={{ marginBottom: '30px', fontWeight: 700, fontSize: '1.1rem', opacity: 0.7 }}>
+          Enter the portal
+        </p>
         
-        <AnimatePresence mode="wait">
-          {view === 'choice' ? (
-            <motion.div key="choice" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <button className="neo-button" style={{ background: 'var(--primary)', justifyContent: 'center', padding: '16px', fontSize: '1.1rem' }} onClick={() => setView('signin')}>
-                Sign In
-              </button>
-              <button className="neo-button" style={{ background: 'var(--accent)', justifyContent: 'center', padding: '16px', fontSize: '1.1rem' }} onClick={() => setView('signup')}>
-                Sign Up
-              </button>
-            </motion.div>
-          ) : (
-            <motion.div key="form" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-              <p style={{ marginBottom: '24px', fontWeight: 700, fontSize: '1.1rem' }}>
-                {view === 'signup' ? 'Create Account' : 'Welcome Back'}
-              </p>
-              
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '24px' }}>
-                <button className="neo-button" style={{ background: 'white', justifyContent: 'center', padding: '12px' }} onClick={() => login()}>
-                  <img src="https://www.google.com/favicon.ico" style={{ width: '16px' }} /> Continue with Google
-                </button>
-                <button className="neo-button" style={{ background: '#000', color: 'white', border: 'none', justifyContent: 'center', padding: '12px' }} onClick={loginWithGithub}>
-                  <Users size={16} /> Continue with GitHub
-                </button>
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '24px' }}>
-                <div style={{ height: '1px', background: '#ddd', flex: 1 }}></div>
-                <span style={{ fontSize: '0.7rem', fontWeight: 800, opacity: 0.4 }}>OR USE EMAIL</span>
-                <div style={{ height: '1px', background: '#ddd', flex: 1 }}></div>
-              </div>
-
-              <form onSubmit={handleManualAuth} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {view === 'signup' && (
-                  <input className="neo-input" placeholder="Full Name" value={name} onChange={e => setName(e.target.value)} required />
-                )}
-                <input className="neo-input" type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} required />
-                <input className="neo-input" type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} required />
-                <button className="neo-button" style={{ background: view === 'signup' ? 'var(--accent)' : 'var(--primary)', justifyContent: 'center', padding: '12px' }}>
-                  {view === 'signup' ? 'Complete Registration' : 'Enter GhostDocs'}
-                </button>
-              </form>
-
-              <button 
-                onClick={() => setView('choice')}
-                style={{ marginTop: '24px', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: '0.8rem', opacity: 0.5 }}
-              >
-                ← Back to options
-              </button>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <button className="neo-button" style={{ background: 'white', justifyContent: 'center', padding: '16px', fontSize: '1.1rem' }} onClick={() => login()} disabled={processing}>
+            <img src="https://www.google.com/favicon.ico" style={{ width: '20px' }} alt="Google" /> Continue with Google
+          </button>
+          <button className="neo-button" style={{ background: '#000', color: 'white', border: 'none', justifyContent: 'center', padding: '16px', fontSize: '1.1rem' }} onClick={loginWithGithub} disabled={processing}>
+            <Users size={20} /> Continue with GitHub
+          </button>
+        </div>
       </motion.div>
     </div>
   );
@@ -154,33 +95,6 @@ const UserLogin = ({ onLoginSuccess }) => (
   </GoogleOAuthProvider>
 );
 
-const AdminLogin = ({ onAdminLogin }) => {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (username === 'admin' && password === 'ravi') {
-      onAdminLogin({ name: "Admin Chief", email: "admin@ghostdocs.ai", is_admin: true, access_token: "internal-chief-token" });
-    } else alert("Wrong words!");
-  };
-  return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--accent)', padding: '20px' }}>
-      <form className="neo-card login-card" style={{ width: '100%', maxWidth: '400px' }} onSubmit={handleSubmit}>
-        <Key size={40} style={{ marginBottom: '20px' }} />
-        <h2>Secret Entry</h2>
-        <div style={{ marginBottom: '20px', marginTop: '20px' }}>
-          <label style={{ display: 'block', marginBottom: '8px', fontWeight: 800 }}>Username</label>
-          <input className="neo-input" value={username} onChange={e => setUsername(e.target.value)} />
-        </div>
-        <div style={{ marginBottom: '30px' }}>
-          <label style={{ display: 'block', marginBottom: '8px', fontWeight: 800 }}>Password</label>
-          <input className="neo-input" type="password" value={password} onChange={e => setPassword(e.target.value)} />
-        </div>
-        <button className="neo-button" style={{ width: '100%', justifyContent: 'center' }}>Enter</button>
-      </form>
-    </div>
-  );
-};
 
 function Dashboard({ user, onLogout }) {
   const [jobs, setJobs] = useState([]);
@@ -506,7 +420,6 @@ function MainApp() {
         <Route path="/" element={user ? <Navigate to="/dashboard" /> : <LandingPage />} />
         <Route path="/login" element={<UserLogin onLoginSuccess={loginSuccess} />} />
         <Route path="/dashboard" element={user ? <Dashboard user={user} onLogout={handleLogout} /> : <Navigate to="/login" />} />
-        <Route path="/admin" element={<AdminLogin onAdminLogin={loginSuccess} />} />
       </Routes>
       <Footer />
     </>
