@@ -13,34 +13,35 @@
   margin: 0;
   padding: 0;
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-weight: 400;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 body {
   background-color: var(--bg);
   color: var(--text);
   overflow-x: hidden;
-  background-image: radial-gradient(#00000010 1px, transparent 1px);
-  background-size: 20px 20px;
+  background-image: radial-gradient(#00000008 1px, transparent 1px);
+  background-size: 30px 30px;
 }
 
 @keyframes float {
   0% { transform: translateY(0px); }
-  50% { transform: translateY(-20px); }
+  50% { transform: translateY(-12px); }
   100% { transform: translateY(0px); }
 }
 
 .floating {
-  animation: float 3s ease-in-out infinite;
+  animation: float 4s ease-in-out infinite;
 }
 
 /* Neobrutalist Utility Classes */
 .neo-card {
   background: white;
-  border: 3px solid var(--border);
-  box-shadow: 4px 4px 0px var(--shadow);
+  border: 2px solid var(--border);
+  box-shadow: 6px 6px 0px #00000015;
   padding: 24px;
   margin-bottom: 24px;
-  transition: transform 0.1s ease;
 }
 
 .neo-button {
@@ -48,13 +49,22 @@ body {
   align-items: center;
   gap: 8px;
   background: white;
-  border: 3px solid var(--border);
-  box-shadow: 3px 3px 0px var(--shadow);
+  border: 2px solid var(--border);
+  box-shadow: 4px 4px 0px #00000010;
   padding: 10px 20px;
-  font-weight: 800;
+  font-weight: 600;
   cursor: pointer;
-  text-transform: uppercase;
-  transition: all 0.1s ease;
+  transition: all 0.2s ease;
+}
+
+.neo-button:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 6px 6px 0px #00000015;
+}
+
+.neo-button:active {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0px var(--shadow);
 }
 
 .neo-button:active {

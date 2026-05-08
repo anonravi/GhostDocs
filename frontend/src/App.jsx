@@ -3,7 +3,7 @@ import axios from 'axios';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Send, RefreshCw, ExternalLink, Ghost, AlertCircle, CheckCircle2, Clock, LogOut, User as UserIcon, Shield, Users, Trash2, Key } from 'lucide-react';
-import { GoogleOAuthProvider, GoogleLogin, googleLogout } from '@react-oauth/google';
+import { GoogleOAuthProvider, useGoogleLogin, googleLogout } from '@react-oauth/google';
 import './index.css';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
@@ -24,7 +24,7 @@ const Navbar = ({ user, onLogout, activeTab, setActiveTab }) => (
   <header className="navbar-header" style={{ marginBottom: '40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
       <Ghost size={32} />
-      <h1 style={{ fontSize: '1.8rem' }}>GhostDocs</h1>
+      <h1 style={{ fontSize: '1.8rem', fontWeight: 900 }}>GhostDocs</h1>
     </div>
     
     <div className="navbar-actions" style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
@@ -37,8 +37,18 @@ const Navbar = ({ user, onLogout, activeTab, setActiveTab }) => (
   </header>
 );
 
-const UserLogin = ({ onLoginSuccess }) => (
-  <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
+const UserLoginContent = ({ onLoginSuccess }) => {
+  const login = useGoogleLogin({
+    onSuccess: async (tokenResponse) => {
+      try {
+        const { data } = await axios.post(`${API_URL}/auth/google`, { token: tokenResponse.access_token, is_access_token: true });
+        onLoginSuccess(data);
+      } catch (e) { alert("Auth failed"); }
+    },
+    onError: () => alert('Login Failed')
+  });
+
+  return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
       <motion.div 
         initial={{ scale: 0.8, opacity: 0, rotate: -2 }}
@@ -62,7 +72,7 @@ const UserLogin = ({ onLoginSuccess }) => (
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ delay: 0.3 }}
-          style={{ marginBottom: '40px', fontSize: '1.1rem', fontWeight: 600, opacity: 0.7 }}
+          style={{ marginBottom: '40px', fontSize: '1.1rem', opacity: 0.7 }}
         >
           Autonomous AI Documentation Agent
         </motion.p>
@@ -72,10 +82,10 @@ const UserLogin = ({ onLoginSuccess }) => (
           transition={{ delay: 0.4 }}
           style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}
         >
-          <div style={{ border: '3px solid black', boxShadow: '4px 4px 0 black' }}>
-            <GoogleLogin onSuccess={onLoginSuccess} onError={() => alert('Login Failed')} width="100%" />
-          </div>
-          <button className="neo-button" style={{ background: '#000', color: 'white', border: 'none', justifyContent: 'center', padding: '15px' }} onClick={loginWithGithub}>
+          <button className="neo-button" style={{ background: 'white', justifyContent: 'center', padding: '15px' }} onClick={() => login()}>
+            <img src="https://www.google.com/favicon.ico" style={{ width: '18px' }} /> Sign in with Google
+          </button>
+          <button className="neo-button" style={{ background: '#000', color: 'white', border: 'none', justifyContent: 'center', padding: '15px', fontWeight: 500 }} onClick={loginWithGithub}>
             <Users size={18} /> Continue with GitHub
           </button>
         </motion.div>
@@ -90,6 +100,12 @@ const UserLogin = ({ onLoginSuccess }) => (
         </motion.div>
       </motion.div>
     </div>
+  );
+};
+
+const UserLogin = ({ onLoginSuccess }) => (
+  <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
+    <UserLoginContent onLoginSuccess={onLoginSuccess} />
   </GoogleOAuthProvider>
 );
 
@@ -175,11 +191,11 @@ function Dashboard({ user, onLogout }) {
               <h2 style={{ marginBottom: '20px' }}>Trigger Generation</h2>
               <div className="dashboard-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '24px' }}>
                 <div>
-                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: 800 }}>Repository</label>
+                  <label style={{ display: 'block', marginBottom: '8px', opacity: 0.8 }}>Repository</label>
                   <input className="neo-input" value={repo} onChange={e => setRepo(e.target.value)} placeholder="org/repo" />
                 </div>
                 <div>
-                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: 800 }}>Branch/SHA</label>
+                  <label style={{ display: 'block', marginBottom: '8px', opacity: 0.8 }}>Branch/SHA</label>
                   <input className="neo-input" value={sha} onChange={e => setSha(e.target.value)} placeholder="main" />
                 </div>
               </div>
