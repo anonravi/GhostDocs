@@ -268,7 +268,7 @@ function Dashboard({ user, onLogout }) {
 }
 
 const Footer = () => (
-  <footer style={{ textAlign: 'center', padding: '40px 20px', opacity: 0.6, fontSize: '0.9rem', fontWeight: 700 }}>
+  <footer style={{ textAlign: 'center', padding: '40px 20px', opacity: 0.6, fontSize: '0.9rem', fontWeight: 700, marginTop: 'auto' }}>
     © {new Date().getFullYear()} Ravi Yadav @ Shoolini University GF202218734
   </footer>
 );
