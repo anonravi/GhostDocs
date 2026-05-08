@@ -1,0 +1,12 @@
+fastapi
+uvicorn
+sqlalchemy
+pydantic
+anthropic
+openai
+google-generativeai
+PyGithub
+python-dotenv
+python-multipart
+aiosqlite
+psycopg2-binary

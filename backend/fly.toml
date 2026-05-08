@@ -1,0 +1,18 @@
+app = "ghostdocs-backend"
+primary_region = "bos"
+
+[processes]
+  web = "uvicorn app.main:app --host 0.0.0.0 --port 8080"
+  worker = "celery -A app.worker.celery worker --loglevel=info"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ["web"]
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory_mb = 512
