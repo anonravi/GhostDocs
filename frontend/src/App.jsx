@@ -42,18 +42,26 @@ const UserLoginContent = ({ onLoginSuccess }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  const [processing, setProcessing] = useState(false);
 
   const login = useGoogleLogin({
     onSuccess: async (tokenResponse) => {
+      if (processing) return;
+      setProcessing(true);
       try {
         const { data } = await axios.post(`${API_URL}/auth/google`, { token: tokenResponse.access_token, is_access_token: true });
         onLoginSuccess(data);
-      } catch (e) { alert(`Google Auth failed: ${e.response?.data?.detail || e.message}`); }
+      } catch (e) { 
+        alert(`Google Auth failed: ${e.response?.data?.detail || e.message}`); 
+        setProcessing(false);
+      }
     }
   });
 
   const handleManualAuth = async (e) => {
     e.preventDefault();
+    if (processing) return;
+    setProcessing(true);
     try {
       const endpoint = view === 'signup' ? 'register' : 'login';
       const payload = view === 'signup' ? { email, password, name } : { email, password };
@@ -61,6 +69,7 @@ const UserLoginContent = ({ onLoginSuccess }) => {
       onLoginSuccess(data);
     } catch (e) {
       alert(`${view === 'signup' ? 'Sign Up' : 'Login'} failed: ${e.response?.data?.detail || e.message}`);
+      setProcessing(false);
     }
   };
 
