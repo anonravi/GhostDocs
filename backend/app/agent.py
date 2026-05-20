@@ -26,26 +26,132 @@ class DocumentationAgent:
             
             self.model = genai.GenerativeModel(self.model_name)
 
+    def repair_json(self, s: str) -> Dict[str, Any]:
+        s = s.strip()
+        if not s:
+            return {}
+        
+        in_string = False
+        escape = False
+        stack = []
+        repaired = []
+        
+        for char in s:
+            if in_string:
+                if escape:
+                    escape = False
+                    repaired.append(char)
+                elif char == '\\':
+                    escape = True
+                    repaired.append(char)
+                elif char == '"':
+                    in_string = False
+                    repaired.append(char)
+                else:
+                    repaired.append(char)
+            else:
+                if char == '"':
+                    in_string = True
+                    repaired.append(char)
+                elif char in ('{', '['):
+                    stack.append(char)
+                    repaired.append(char)
+                elif char in ('}', ']'):
+                    if stack:
+                        stack.pop()
+                    repaired.append(char)
+                else:
+                    repaired.append(char)
+                    
+        if in_string and escape:
+            repaired.pop()
+        if in_string:
+            repaired.append('"')
+            
+        temp_str = "".join(repaired).strip()
+        
+        for attempt in range(100):
+            temp_str = temp_str.strip()
+            if not temp_str:
+                break
+            if temp_str.endswith(','):
+                temp_str = temp_str[:-1].strip()
+                continue
+                
+            new_stack = []
+            in_s = False
+            esc = False
+            for c in temp_str:
+                if in_s:
+                    if esc:
+                        esc = False
+                    elif c == '\\':
+                        esc = True
+                    elif c == '"':
+                        in_s = False
+                else:
+                    if c == '"':
+                        in_s = True
+                    elif c in ('{', '['):
+                        new_stack.append(c)
+                    elif c in ('}', ']'):
+                        if new_stack:
+                            new_stack.pop()
+                            
+            closing = ""
+            for char in reversed(new_stack):
+                if char == '{':
+                    closing += '}'
+                elif char == '[':
+                    closing += ']'
+                    
+            try:
+                return json.loads(temp_str + closing)
+            except Exception:
+                if temp_str.endswith('"'):
+                    last_quote_idx = temp_str[:-1].rfind('"')
+                    if last_quote_idx != -1:
+                        temp_str = temp_str[:last_quote_idx].strip()
+                        continue
+                temp_str = temp_str[:-1].strip()
+                
+        raise ValueError("Could not repair JSON")
+
     def extract_json(self, text: str) -> Dict[str, Any]:
-        # Try to find JSON block
-        match = re.search(r'\{.*\}', text, re.DOTALL)
+        text = text.strip()
+        
+        # 1. Try standard cleanup of markdown blocks if present
+        cleaned_text = text
+        if cleaned_text.startswith("```json"):
+            cleaned_text = cleaned_text.split("```json")[1].split("```")[0].strip()
+        elif cleaned_text.startswith("```"):
+            cleaned_text = cleaned_text.split("```")[1].split("```")[0].strip()
+            
+        # Try to parse standard JSON
+        try:
+            return json.loads(cleaned_text)
+        except Exception:
+            pass
+            
+        # Try to find standard JSON block using regex if there was wrapping text
+        match = re.search(r'\{.*\}', cleaned_text, re.DOTALL)
         if match:
             try:
                 return json.loads(match.group())
-            except:
+            except Exception:
                 pass
-        
-        # Try simple cleanup
-        text = text.strip()
-        if text.startswith("```json"):
-            text = text.split("```json")[1].split("```")[0].strip()
-        elif text.startswith("```"):
-            text = text.split("```")[1].split("```")[0].strip()
-        
+                
+        # If all else fails, use our highly robust partial JSON repair function!
         try:
-            return json.loads(text)
+            # We want to find the first `{` and repair from there
+            start_idx = cleaned_text.find('{')
+            if start_idx != -1:
+                return self.repair_json(cleaned_text[start_idx:])
         except Exception as e:
-            raise ValueError(f"Failed to parse JSON: {str(e)}\nRaw: {text[:200]}")
+            # Re-raise with descriptive message
+            raise ValueError(f"Failed to parse JSON (repair attempted): {str(e)}\nRaw snippet: {text[:200]}")
+            
+        raise ValueError(f"Failed to parse JSON: No valid JSON object start found.\nRaw snippet: {text[:200]}")
 
     def generate_documentation(self, codebase_context: Dict[str, Any]) -> Dict[str, Any]:
         system_prompt = """
@@ -79,17 +185,36 @@ class DocumentationAgent:
                 ],
                 response_format={"type": "json_object"}
             )
-            return json.loads(response.choices[0].message.content)
+            return self.extract_json(response.choices[0].message.content)
 
         elif self.provider == "gemini":
-            full_prompt = f"{system_prompt}\n\n{user_content}"
-            response = self.model.generate_content(
-                full_prompt,
-                generation_config=genai.types.GenerationConfig(
-                    max_output_tokens=8192,
-                    temperature=0.1
+            try:
+                # Use native JSON mode and system instruction for maximum reliability
+                model = genai.GenerativeModel(
+                    model_name=self.model_name,
+                    system_instruction=system_prompt
                 )
-            )
-            return self.extract_json(response.text)
+                response = model.generate_content(
+                    user_content,
+                    generation_config=genai.types.GenerationConfig(
+                        response_mime_type="application/json",
+                        max_output_tokens=8192,
+                        temperature=0.1
+                    )
+                )
+                text = response.text
+            except Exception:
+                # Fallback to the original prompting style if native JSON mode / system instruction fails
+                full_prompt = f"{system_prompt}\n\n{user_content}"
+                response = self.model.generate_content(
+                    full_prompt,
+                    generation_config=genai.types.GenerationConfig(
+                        max_output_tokens=8192,
+                        temperature=0.1
+                    )
+                )
+                text = response.text
+            
+            return self.extract_json(text)
 
         return {"error": "Invalid provider"}
