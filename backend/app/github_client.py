@@ -19,19 +19,26 @@ class GitHubClient:
 
         # Update files
         # 1. README
-        try:
-            readme_content = repo.get_contents("README.md", ref=new_branch_name)
-            repo.update_file("README.md", "docs: update README [GhostDocs]", docs["readme"], 
-                             readme_content.sha, branch=new_branch_name)
-        except:
-            repo.create_file("README.md", "docs: create README [GhostDocs]", docs["readme"], branch=new_branch_name)
+        readme = docs.get("readme")
+        if readme:
+            try:
+                readme_content = repo.get_contents("README.md", ref=new_branch_name)
+                repo.update_file("README.md", "docs: update README [GhostDocs]", readme, 
+                                 readme_content.sha, branch=new_branch_name)
+            except:
+                repo.create_file("README.md", "docs: create README [GhostDocs]", readme, branch=new_branch_name)
         
         # 2. API Docs
-        try:
-            repo.create_file("docs/API.md", "docs: update API documentation [GhostDocs]", docs["api_docs"], branch=new_branch_name)
-        except:
-            repo.update_file("docs/API.md", "docs: update API documentation [GhostDocs]", docs["api_docs"], 
-                             repo.get_contents("docs/API.md", ref=new_branch_name).sha, branch=new_branch_name)
+        api_docs = docs.get("api_docs")
+        if api_docs:
+            try:
+                repo.create_file("docs/API.md", "docs: update API documentation [GhostDocs]", api_docs, branch=new_branch_name)
+            except:
+                try:
+                    repo.update_file("docs/API.md", "docs: update API documentation [GhostDocs]", api_docs, 
+                                     repo.get_contents("docs/API.md", ref=new_branch_name).sha, branch=new_branch_name)
+                except Exception as e:
+                    print(f"Error updating docs/API.md: {e}")
 
         # 3. Inline comments (this is tricky, usually we'd patch files)
         for item in docs.get("inline_comments", []):
