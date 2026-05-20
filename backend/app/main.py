@@ -201,8 +201,7 @@ async def google_auth(req: dict, db: Session = Depends(database.get_db)):
     name = payload.get("name", "")
     user = db.query(models.User).filter(models.User.email == email).first()
     if not user:
-        is_first = db.query(models.User).count() == 0
-        user = models.User(email=email, full_name=name, is_admin=1 if is_first else 0)
+        user = models.User(email=email, full_name=name, is_admin=0)
         db.add(user)
         db.commit()
         db.refresh(user)
@@ -241,8 +240,7 @@ async def github_auth(data: dict, db: Session = Depends(database.get_db)):
             
             user = db.query(models.User).filter(models.User.email == email).first()
             if not user:
-                is_first = db.query(models.User).count() == 0
-                user = models.User(email=email, full_name=gh_user.get("name", gh_user.get("login")), is_admin=1 if is_first else 0)
+                user = models.User(email=email, full_name=gh_user.get("name", gh_user.get("login")), is_admin=0)
                 db.add(user)
             
             user.github_token = gh_token

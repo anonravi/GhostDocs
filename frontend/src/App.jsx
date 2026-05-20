@@ -17,12 +17,12 @@ axios.interceptors.request.use(config => {
 });
 
 const loginWithGithub = () => {
-  localStorage.setItem('github_intent', 'login');
+  try { localStorage.setItem('github_intent', 'login'); } catch(e) {}
   window.location.href = `https://github.com/login/oauth/authorize?client_id=${GITHUB_CLIENT_ID}&scope=user,repo`;
 };
 
 const connectGithub = () => {
-  localStorage.setItem('github_intent', 'connect');
+  try { localStorage.setItem('github_intent', 'connect'); } catch(e) {}
   window.location.href = `https://github.com/login/oauth/authorize?client_id=${GITHUB_CLIENT_ID}&scope=user,repo`;
 };
 
@@ -51,7 +51,6 @@ const Navbar = ({ user, onLogout, activeTab, setActiveTab }) => (
 );
 
 const UserLoginContent = ({ onLoginSuccess }) => {
-  const [view, setView] = useState('choice'); // 'choice', 'signin', 'signup'
   const [processing, setProcessing] = useState(false);
 
   const login = useGoogleLogin({
@@ -79,40 +78,19 @@ const UserLoginContent = ({ onLoginSuccess }) => {
         <div className="floating" style={{ display: 'inline-block', marginBottom: '20px' }}>
           <Ghost size={60} strokeWidth={2.5} />
         </div>
-        <h1 style={{ fontSize: '2.5rem', fontWeight: 900, marginBottom: '30px' }}>GhostDocs</h1>
+        <h1 style={{ fontSize: '2.5rem', fontWeight: 900, marginBottom: '20px' }}>GhostDocs</h1>
+        <p style={{ marginBottom: '30px', fontWeight: 700, fontSize: '1.1rem', opacity: 0.7 }}>
+          Sign In or Create an Account
+        </p>
         
-        <AnimatePresence mode="wait">
-          {view === 'choice' ? (
-            <motion.div key="choice" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <button className="neo-button" style={{ background: 'var(--primary)', justifyContent: 'center', padding: '16px', fontSize: '1.1rem' }} onClick={() => setView('signin')}>
-                Sign In
-              </button>
-              <button className="neo-button" style={{ background: 'var(--accent)', justifyContent: 'center', padding: '16px', fontSize: '1.1rem' }} onClick={() => setView('signup')}>
-                Sign Up
-              </button>
-            </motion.div>
-          ) : (
-            <motion.div key="oauth" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-              <p style={{ marginBottom: '24px', fontWeight: 700, fontSize: '1.1rem', opacity: 0.7 }}>
-                {view === 'signup' ? 'Create your account' : 'Welcome back'}
-              </p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                <button className="neo-button" style={{ background: 'white', justifyContent: 'center', padding: '16px', fontSize: '1.1rem' }} onClick={() => login()} disabled={processing}>
-                  <img src="https://www.google.com/favicon.ico" style={{ width: '20px' }} alt="Google" /> Continue with Google
-                </button>
-                <button className="neo-button" style={{ background: '#000', color: 'white', border: 'none', justifyContent: 'center', padding: '16px', fontSize: '1.1rem' }} onClick={loginWithGithub} disabled={processing}>
-                  <Users size={20} /> Continue with GitHub
-                </button>
-              </div>
-              <button 
-                onClick={() => setView('choice')}
-                style={{ marginTop: '24px', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: '0.8rem', opacity: 0.5 }}
-              >
-                ← Back to options
-              </button>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <button className="neo-button" style={{ background: 'white', justifyContent: 'center', padding: '16px', fontSize: '1.1rem' }} onClick={() => login()} disabled={processing}>
+            <img src="https://www.google.com/favicon.ico" style={{ width: '20px' }} alt="Google" /> Continue with Google
+          </button>
+          <button className="neo-button" style={{ background: '#000', color: 'white', border: 'none', justifyContent: 'center', padding: '16px', fontSize: '1.1rem' }} onClick={loginWithGithub} disabled={processing}>
+            <Users size={20} /> Continue with GitHub
+          </button>
+        </div>
       </motion.div>
     </div>
   );
@@ -439,15 +417,19 @@ function MainApp() {
 
   const handleGithubCallback = async (code) => {
     try {
-      const intent = localStorage.getItem('github_intent');
+      let intent = 'login';
+      try { intent = localStorage.getItem('github_intent'); } catch(e) {}
+      
       const endpoint = intent === 'connect' ? `${API_URL}/auth/github/connect` : `${API_URL}/auth/github`;
       const { data } = await axios.post(endpoint, { code });
       
       if (intent === 'connect') {
         const updatedUser = { ...user, has_github: true };
         setUser(updatedUser);
-        localStorage.setItem('user', JSON.stringify(updatedUser));
-        localStorage.removeItem('github_intent');
+        try {
+          localStorage.setItem('user', JSON.stringify(updatedUser));
+          localStorage.removeItem('github_intent');
+        } catch(e) {}
       } else {
         loginSuccess(data);
       }
