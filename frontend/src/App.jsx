@@ -63,7 +63,11 @@ const UserLoginContent = ({ onLoginSuccess }) => {
         const { data } = await axios.post(`${API_URL}/auth/google`, { token: tokenResponse.access_token, is_access_token: true });
         onLoginSuccess(data);
       } catch (e) { 
-        alert(`Google Auth failed: ${e.response?.data?.detail || e.message}`); 
+        if (e.message === "Network Error") {
+          alert("👻 The backend server is currently waking up from sleep mode (Render free tier). This usually takes 30-50 seconds. Please wait a moment and try again!");
+        } else {
+          alert(`Google Auth failed: ${e.response?.data?.detail || e.message}`); 
+        }
         setProcessing(false);
       }
     }
@@ -148,6 +152,15 @@ function Dashboard({ user, onLogout, setUser }) {
       setRepos(data);
     } catch (e) { 
       console.error('Failed to fetch repos:', e);
+      // If the backend returns a 400, 401, or 502, it means the GitHub token is invalid/expired/missing.
+      // We update the user state to has_github = false to let them re-connect seamlessly!
+      if (e.response?.status === 400 || e.response?.status === 401 || e.response?.status === 502) {
+        const updatedUser = { ...user, has_github: false };
+        setUser(updatedUser);
+        try {
+          localStorage.setItem('user', JSON.stringify(updatedUser));
+        } catch(err) {}
+      }
     }
     finally { setReposLoading(false); }
   };
@@ -332,10 +345,43 @@ function Dashboard({ user, onLogout, setUser }) {
                   <h2 style={{ marginBottom: '20px' }}>Generate Documentation</h2>
                   
                   <div style={{ marginBottom: '20px', position: 'relative' }}>
-                    <label style={{ display: 'block', marginBottom: '8px', opacity: 0.8, fontWeight: 700 }}>Select Repository</label>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                      <label style={{ opacity: 0.8, fontWeight: 700 }}>Select Repository</label>
+                      {user?.has_github && (
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            fetchRepos();
+                          }}
+                          disabled={reposLoading}
+                          style={{ 
+                            background: 'none', 
+                            border: 'none', 
+                            cursor: 'pointer', 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            gap: '4px', 
+                            fontSize: '0.8rem', 
+                            fontWeight: 800, 
+                            color: 'var(--primary)',
+                            padding: '2px 6px',
+                          }}
+                          className="hover-opacity"
+                        >
+                          <RefreshCw size={12} className={reposLoading ? 'spinner' : ''} />
+                          {reposLoading ? 'Refreshing...' : 'Refresh'}
+                        </button>
+                      )}
+                    </div>
                     <div 
                       className="neo-input" 
-                      onClick={() => setDropdownOpen(!dropdownOpen)}
+                      onClick={() => {
+                        const nextState = !dropdownOpen;
+                        setDropdownOpen(nextState);
+                        if (nextState && user?.has_github) {
+                          fetchRepos();
+                        }
+                      }}
                       style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
                     >
                       {selectedRepo ? (
