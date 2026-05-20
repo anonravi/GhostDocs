@@ -142,7 +142,7 @@ function Dashboard({ user, onLogout, setUser }) {
         const aRes = await axios.get(`${API_URL}/admin/analytics`);
         setAnalytics(aRes.data);
       }
-    } catch (e) { if (e.response?.status === 401) onLogout(); }
+    } catch (e) { if (e.response?.status === 401 || e.response?.status === 403) onLogout(); }
   };
 
   const fetchRepos = async () => {
@@ -871,6 +871,21 @@ function MainApp() {
     setUser(null);
     navigate('/');
   };
+
+  useEffect(() => {
+    const interceptor = axios.interceptors.response.use(
+      response => response,
+      error => {
+        if (error.response?.status === 401 || error.response?.status === 403) {
+          handleLogout();
+        }
+        return Promise.reject(error);
+      }
+    );
+    return () => {
+      axios.interceptors.response.eject(interceptor);
+    };
+  }, []);
 
   return (
     <>
