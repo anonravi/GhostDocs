@@ -125,12 +125,20 @@ function Dashboard({ user, onLogout, setUser }) {
 
   // Generation state
   const [generating, setGenerating] = useState(false);
+  const [generatingSeconds, setGeneratingSeconds] = useState(0);
   const [preview, setPreview] = useState(null); // { job_id, readme, api_docs, mermaid_diagram }
   const [pushing, setPushing] = useState(false);
 
   // Admin and Onboarding UI states
   const [adminUserSearch, setAdminUserSearch] = useState('');
   const [selectedJobLogs, setSelectedJobLogs] = useState(null);
+
+  // Live elapsed-seconds timer while generating
+  useEffect(() => {
+    if (!generating) { setGeneratingSeconds(0); return; }
+    const interval = setInterval(() => setGeneratingSeconds(s => s + 1), 1000);
+    return () => clearInterval(interval);
+  }, [generating]);
 
   const fetchJobs = async () => {
     try {
@@ -188,8 +196,36 @@ function Dashboard({ user, onLogout, setUser }) {
     setGenerating(true);
     setPreview(null);
     try {
-      const { data } = await axios.post(`${API_URL}/generate/preview`, { repo_name: selectedRepo.full_name, branch });
-      setPreview(data);
+      // 🚀 Step 1: Fire off the job — backend returns immediately with job_id
+      const { data: jobStart } = await axios.post(`${API_URL}/generate/preview`, { repo_name: selectedRepo.full_name, branch });
+      const jobId = jobStart.job_id;
+
+      // 🔄 Step 2: Poll /jobs/{job_id} every 3 seconds until it's done
+      // This avoids Render's 30-second HTTP timeout killing long AI calls
+      await new Promise((resolve, reject) => {
+        const MAX_WAIT_MS = 5 * 60 * 1000; // 5 minute max
+        const POLL_INTERVAL_MS = 3000;
+        const startTime = Date.now();
+
+        const poll = async () => {
+          try {
+            const { data: jobStatus } = await axios.get(`${API_URL}/jobs/${jobId}`);
+            if (jobStatus.status === 'preview') {
+              setPreview(jobStatus);
+              resolve();
+            } else if (jobStatus.status === 'failed') {
+              reject(new Error(jobStatus.error_message || 'Generation failed on the server.'));
+            } else if (Date.now() - startTime > MAX_WAIT_MS) {
+              reject(new Error('Generation timed out after 5 minutes. Try a smaller repository.'));
+            } else {
+              setTimeout(poll, POLL_INTERVAL_MS);
+            }
+          } catch (pollErr) {
+            reject(pollErr);
+          }
+        };
+        setTimeout(poll, POLL_INTERVAL_MS);
+      });
     } catch (e) {
       alert(`Generation failed: ${e.response?.data?.detail || e.message}`);
     } finally { setGenerating(false); }
@@ -437,7 +473,7 @@ function Dashboard({ user, onLogout, setUser }) {
 
                   {selectedRepo && !preview && (
                     <button className="neo-button" onClick={handleGenerate} disabled={generating} style={{ width: '100%', justifyContent: 'center', background: 'var(--accent)', padding: '16px', fontSize: '1.1rem' }}>
-                      {generating ? <><RefreshCw className="spinner" size={20} /> Generating... (this may take a minute)</> : <><Eye size={20} /> Generate README Preview</>}
+                      {generating ? <><RefreshCw className="spinner" size={20} /> Analyzing repo... {generatingSeconds}s (AI is thinking)</> : <><Eye size={20} /> Generate README Preview</>}
                     </button>
                   )}
                 </section>

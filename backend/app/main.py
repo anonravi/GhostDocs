@@ -9,6 +9,8 @@ from typing import List
 import uuid
 import os
 import jwt
+import threading
+import concurrent.futures
 from datetime import datetime, timedelta
 from . import models, database, schemas, worker
 from fastapi.responses import JSONResponse
@@ -112,7 +114,32 @@ async def list_repos(user: models.User = Depends(get_current_user)):
     except httpx.RequestError as e:
         raise HTTPException(502, f"Failed to reach GitHub: {str(e)}")
 
-# ─── Generate Preview (Synchronous) ─────────────────────────────
+# ─── Background Generation Thread Helper ────────────────────────
+def _run_generation_in_background(job_id: str, repo_name: str, branch: str, gh_token: str):
+    """Runs git clone + AI generation in a background thread, then updates the DB."""
+    db = database.SessionLocal()
+    try:
+        db_job = db.query(models.Job).filter(models.Job.id == job_id).first()
+        if not db_job:
+            return
+        docs = worker.generate_docs_only(repo_name, branch, gh_token)
+        db_job.status = "preview"
+        db_job.artifacts = docs
+        db.commit()
+    except Exception as e:
+        logger.error(f"Background generation failed for job {job_id}: {e}", exc_info=True)
+        try:
+            db_job = db.query(models.Job).filter(models.Job.id == job_id).first()
+            if db_job:
+                db_job.status = "failed"
+                db_job.error_message = str(e)[:500]
+                db.commit()
+        except Exception:
+            pass
+    finally:
+        db.close()
+
+# ─── Generate Preview (Async — returns immediately) ───────────────
 @app.post("/generate/preview")
 async def generate_preview(payload: schemas.PreviewRequest, user: models.User = Depends(get_current_user), db: Session = Depends(database.get_db)):
     gh_token = user.github_token or os.getenv("GITHUB_TOKEN")
@@ -130,25 +157,16 @@ async def generate_preview(payload: schemas.PreviewRequest, user: models.User = 
     db.add(db_job)
     db.commit()
 
-    try:
-        docs = worker.generate_docs_only(payload.repo_name, payload.branch, gh_token)
-        
-        db_job.status = "preview"
-        db_job.artifacts = docs
-        db.commit()
-        db.refresh(db_job)
+    # 🚀 Fire off generation in a background thread — return immediately so
+    # the HTTP connection isn't held open past Render's 30-second timeout.
+    t = threading.Thread(
+        target=_run_generation_in_background,
+        args=(job_id, payload.repo_name, payload.branch, gh_token),
+        daemon=True
+    )
+    t.start()
 
-        return {
-            "job_id": job_id,
-            "readme": docs.get("readme", ""),
-            "api_docs": docs.get("api_docs", ""),
-            "mermaid_diagram": docs.get("mermaid_diagram", "")
-        }
-    except Exception as e:
-        db_job.status = "failed"
-        db_job.error_message = str(e)
-        db.commit()
-        raise HTTPException(500, f"Generation failed: {str(e)}")
+    return {"job_id": job_id, "status": "processing"}
 
 # ─── Push Approved Docs to GitHub ────────────────────────────────
 @app.post("/generate/push")
@@ -183,6 +201,23 @@ async def push_to_github(payload: schemas.PushRequest, user: models.User = Depen
         job.error_message = str(e)
         db.commit()
         raise HTTPException(500, f"Push failed: {str(e)}")
+
+# ─── Single Job Status (for polling) ───────────────────────────
+@app.get("/jobs/{job_id}")
+async def get_job(job_id: str, user: models.User = Depends(get_current_user), db: Session = Depends(database.get_db)):
+    job = db.query(models.Job).filter(models.Job.id == job_id).first()
+    if not job:
+        raise HTTPException(404, "Job not found")
+    if job.user_id != user.id and not user.is_admin:
+        raise HTTPException(403, "Access denied")
+    return {
+        "job_id": job.id,
+        "status": job.status,
+        "error_message": job.error_message,
+        "readme": (job.artifacts or {}).get("readme", ""),
+        "api_docs": (job.artifacts or {}).get("api_docs", ""),
+        "mermaid_diagram": (job.artifacts or {}).get("mermaid_diagram", ""),
+    }
 
 # ─── Job History (Scoped to User) ───────────────────────────────
 @app.get("/jobs", response_model=List[schemas.JobResponse])
