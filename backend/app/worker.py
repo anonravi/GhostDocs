@@ -56,7 +56,7 @@ def process_docs_task(job_id: str, repo_name: str, commit_sha: str, gh_token: st
         docs = doc_agent.generate_documentation({"files": codebase_context})
 
         # 4. Create Pull Request
-        gh = github_client.GitHubClient()
+        gh = github_client.GitHubClient(token=token)
         pr_url = gh.create_documentation_pr(repo_name, "main", docs, commit_sha, job_id)
 
         # 5. Success
