@@ -11,27 +11,16 @@ celery = Celery(__name__)
 celery.conf.broker_url = REDIS_URL
 celery.conf.result_backend = REDIS_URL
 
-@celery.task(name="process_docs_task")
-def process_docs_task(job_id: str, repo_name: str, commit_sha: str, gh_token: str = None):
-    db = database.SessionLocal()
-    job = db.query(models.Job).filter(models.Job.id == job_id).first()
-    
-    # Fallback to global token if user's token is missing
+def generate_docs_only(repo_name: str, commit_sha: str, gh_token: str = None):
+    """Clone repo, parse AST, run AI agent, and return generated docs dict."""
     token = gh_token or os.getenv("GITHUB_TOKEN")
+    temp_dir = f"/tmp/ghostdocs-{uuid.uuid4()}"
     
-    if not job:
-        db.close()
-        return
-
     try:
-        job.status = "processing"
-        db.commit()
-
         # 1. Clone Repo
-        temp_dir = f"/tmp/ghostdocs-{job_id}"
         repo_url = f"https://x-access-token:{token}@github.com/{repo_name}.git"
-        subprocess.run(["git", "clone", repo_url, temp_dir], check=True)
-        subprocess.run(["git", "checkout", commit_sha], cwd=temp_dir, check=True)
+        subprocess.run(["git", "clone", repo_url, temp_dir], check=True, capture_output=True)
+        subprocess.run(["git", "checkout", commit_sha], cwd=temp_dir, check=True, capture_output=True)
 
         # 2. Scan Files & Parse AST
         parser = ast_parser.ASTParser()
@@ -39,10 +28,10 @@ def process_docs_task(job_id: str, repo_name: str, commit_sha: str, gh_token: st
         for root, _, files in os.walk(temp_dir):
             if ".git" in root: continue
             for file in files:
-                if file.endswith((".py", ".js", ".ts", ".html")):
+                if file.endswith((".py", ".js", ".ts", ".html", ".jsx", ".tsx", ".css")):
                     file_path = os.path.join(root, file)
                     rel_path = os.path.relpath(file_path, temp_dir)
-                    with open(file_path, "r") as f:
+                    with open(file_path, "r", errors="ignore") as f:
                         code = f.read()
                     symbols = parser.get_symbols(file, code)
                     codebase_context.append({
@@ -54,12 +43,39 @@ def process_docs_task(job_id: str, repo_name: str, commit_sha: str, gh_token: st
         # 3. Generate Documentation
         doc_agent = agent.DocumentationAgent()
         docs = doc_agent.generate_documentation({"files": codebase_context})
+        return docs
 
-        # 4. Create Pull Request
-        gh = github_client.GitHubClient(token=token)
-        pr_url = gh.create_documentation_pr(repo_name, "main", docs, commit_sha, job_id)
+    finally:
+        if os.path.exists(temp_dir):
+            shutil.rmtree(temp_dir)
 
-        # 5. Success
+
+def push_docs_to_github(repo_name: str, base_branch: str, docs: dict, commit_sha: str, job_id: str, gh_token: str = None):
+    """Create branch, commit docs, and open PR. Returns the PR URL."""
+    token = gh_token or os.getenv("GITHUB_TOKEN")
+    gh = github_client.GitHubClient(token=token)
+    return gh.create_documentation_pr(repo_name, base_branch, docs, commit_sha, job_id)
+
+
+@celery.task(name="process_docs_task")
+def process_docs_task(job_id: str, repo_name: str, commit_sha: str, gh_token: str = None):
+    """Legacy Celery task — kept for backward compatibility."""
+    db = database.SessionLocal()
+    job = db.query(models.Job).filter(models.Job.id == job_id).first()
+    
+    token = gh_token or os.getenv("GITHUB_TOKEN")
+    
+    if not job:
+        db.close()
+        return
+
+    try:
+        job.status = "processing"
+        db.commit()
+
+        docs = generate_docs_only(repo_name, commit_sha, token)
+        pr_url = push_docs_to_github(repo_name, "main", docs, commit_sha, job_id, token)
+
         job.status = "completed"
         job.pr_url = pr_url
         job.artifacts = docs
@@ -70,6 +86,4 @@ def process_docs_task(job_id: str, repo_name: str, commit_sha: str, gh_token: st
         job.error_message = str(e)
         db.commit()
     finally:
-        if os.path.exists(temp_dir):
-            shutil.rmtree(temp_dir)
         db.close()

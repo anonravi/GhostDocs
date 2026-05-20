@@ -6,12 +6,25 @@ class GenerateRequest(BaseModel):
     repo_name: str
     commit_sha: str
 
+class PreviewRequest(BaseModel):
+    repo_name: str
+    branch: str = "main"
+
+class PushRequest(BaseModel):
+    job_id: str
+
+class RepoResponse(BaseModel):
+    full_name: str
+    private: bool
+    default_branch: str
+
 class UserResponse(BaseModel):
     id: int
     email: str
     full_name: Optional[str]
     is_admin: int
     is_active: int
+    has_github: bool = False
     created_at: datetime
 
     class Config:
@@ -32,3 +45,9 @@ class JobResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+class PreviewResponse(BaseModel):
+    job_id: str
+    readme: str
+    api_docs: str
+    mermaid_diagram: str

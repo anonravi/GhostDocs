@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, RefreshCw, ExternalLink, Ghost, AlertCircle, CheckCircle2, Clock, LogOut, User as UserIcon, Shield, Users, Trash2, Key, Code } from 'lucide-react';
+import { Send, RefreshCw, ExternalLink, Ghost, AlertCircle, CheckCircle2, Clock, LogOut, User as UserIcon, Shield, Users, Trash2, Key, Code, ChevronDown, Eye, Lock, GitBranch } from 'lucide-react';
 import { GoogleOAuthProvider, useGoogleLogin, googleLogout } from '@react-oauth/google';
 import './index.css';
 
@@ -26,6 +26,7 @@ const connectGithub = () => {
   window.location.href = `https://github.com/login/oauth/authorize?client_id=${GITHUB_CLIENT_ID}&scope=user,repo`;
 };
 
+// ─── Navbar ─────────────────────────────────────────────────────
 const Navbar = ({ user, onLogout, activeTab, setActiveTab }) => (
   <header className="navbar-header" style={{ marginBottom: '40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -50,6 +51,7 @@ const Navbar = ({ user, onLogout, activeTab, setActiveTab }) => (
   </header>
 );
 
+// ─── Login Screen ───────────────────────────────────────────────
 const UserLoginContent = ({ onLoginSuccess }) => {
   const [processing, setProcessing] = useState(false);
 
@@ -102,21 +104,30 @@ const UserLogin = ({ onLoginSuccess }) => (
   </GoogleOAuthProvider>
 );
 
-
-function Dashboard({ user, onLogout }) {
+// ─── Dashboard ──────────────────────────────────────────────────
+function Dashboard({ user, onLogout, setUser }) {
   const [jobs, setJobs] = useState([]);
   const [users, setUsers] = useState([]);
-  const [repo, setRepo] = useState('');
-  const [sha, setSha] = useState('main');
-  const [loading, setLoading] = useState(false);
+  const [analytics, setAnalytics] = useState(null);
   const [activeTab, setActiveTab] = useState('dashboard');
 
-  const [analytics, setAnalytics] = useState(null);
+  // Repo picker state
+  const [repos, setRepos] = useState([]);
+  const [reposLoading, setReposLoading] = useState(false);
+  const [selectedRepo, setSelectedRepo] = useState(null);
+  const [branch, setBranch] = useState('main');
+  const [repoSearch, setRepoSearch] = useState('');
+  const [dropdownOpen, setDropdownOpen] = useState(false);
 
-  const fetchData = async () => {
+  // Generation state
+  const [generating, setGenerating] = useState(false);
+  const [preview, setPreview] = useState(null); // { job_id, readme, api_docs, mermaid_diagram }
+  const [pushing, setPushing] = useState(false);
+
+  const fetchJobs = async () => {
     try {
       const jRes = await axios.get(`${API_URL}/jobs`);
-      setJobs(jRes.data.reverse());
+      setJobs(jRes.data);
       if (user?.is_admin) {
         const uRes = await axios.get(`${API_URL}/users`);
         setUsers(uRes.data);
@@ -126,30 +137,72 @@ function Dashboard({ user, onLogout }) {
     } catch (e) { if (e.response?.status === 401) onLogout(); }
   };
 
+  const fetchRepos = async () => {
+    setReposLoading(true);
+    try {
+      const { data } = await axios.get(`${API_URL}/repos`);
+      setRepos(data);
+    } catch (e) { 
+      console.error('Failed to fetch repos:', e);
+    }
+    finally { setReposLoading(false); }
+  };
+
   useEffect(() => {
-    fetchData();
-    const interval = setInterval(fetchData, 5000);
+    fetchJobs();
+    const interval = setInterval(fetchJobs, 10000);
     return () => clearInterval(interval);
   }, []);
 
-  const triggerDocs = async () => {
-    setLoading(true);
+  useEffect(() => {
+    if (user?.has_github) fetchRepos();
+  }, [user?.has_github]);
+
+  const handleSelectRepo = (repo) => {
+    setSelectedRepo(repo);
+    setBranch(repo.default_branch);
+    setRepoSearch('');
+    setDropdownOpen(false);
+    setPreview(null);
+  };
+
+  const handleGenerate = async () => {
+    if (!selectedRepo) return;
+    setGenerating(true);
+    setPreview(null);
     try {
-      await axios.post(`${API_URL}/generate`, { repo_name: repo, commit_sha: sha });
-      fetchData();
-    } catch (e) { alert(e.response?.data?.detail || e.message); }
-    finally { setLoading(false); }
+      const { data } = await axios.post(`${API_URL}/generate/preview`, { repo_name: selectedRepo.full_name, branch });
+      setPreview(data);
+    } catch (e) {
+      alert(`Generation failed: ${e.response?.data?.detail || e.message}`);
+    } finally { setGenerating(false); }
+  };
+
+  const handlePush = async () => {
+    if (!preview?.job_id) return;
+    setPushing(true);
+    try {
+      const { data } = await axios.post(`${API_URL}/generate/push`, { job_id: preview.job_id });
+      alert(`✅ PR created successfully!`);
+      setPreview(null);
+      setSelectedRepo(null);
+      fetchJobs();
+    } catch (e) {
+      alert(`Push failed: ${e.response?.data?.detail || e.message}`);
+    } finally { setPushing(false); }
   };
 
   const toggleUserActive = async (id) => {
     await axios.post(`${API_URL}/users/${id}/toggle-active`);
-    fetchData();
+    fetchJobs();
   };
 
   const toggleUserAdmin = async (id) => {
     await axios.post(`${API_URL}/users/${id}/toggle-admin`);
-    fetchData();
+    fetchJobs();
   };
+
+  const filteredRepos = repos.filter(r => r.full_name.toLowerCase().includes(repoSearch.toLowerCase()));
 
   return (
     <div className="container">
@@ -157,10 +210,11 @@ function Dashboard({ user, onLogout }) {
       <AnimatePresence mode="wait">
         {activeTab === 'dashboard' ? (
           <motion.div key="dash" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
-            <section className="neo-card">
-              <h2 style={{ marginBottom: '20px' }}>Trigger Generation</h2>
-              {!user?.has_github ? (
-                <div style={{ textAlign: 'center', padding: '40px 20px', background: '#ffebee', border: '2px solid #f44336', borderRadius: '12px', marginBottom: '24px' }}>
+            
+            {/* ─── GitHub Connection Gate ─── */}
+            {!user?.has_github ? (
+              <section className="neo-card">
+                <div style={{ textAlign: 'center', padding: '40px 20px' }}>
                   <AlertCircle size={40} color="#f44336" style={{ margin: '0 auto 16px auto', display: 'block' }} />
                   <h3 style={{ marginBottom: '10px', color: '#b71c1c' }}>GitHub Connection Required</h3>
                   <p style={{ marginBottom: '20px', color: '#c62828', maxWidth: '500px', margin: '0 auto 20px auto' }}>You need to link your GitHub account to allow GhostDocs to read your repositories and create pull requests.</p>
@@ -168,30 +222,106 @@ function Dashboard({ user, onLogout }) {
                     <Users size={16} /> Connect GitHub Now
                   </button>
                 </div>
-              ) : (
-                <>
-                  <div className="dashboard-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '24px' }}>
-                    <div>
-                      <label style={{ display: 'block', marginBottom: '8px', opacity: 0.8 }}>Repository</label>
-                      <input className="neo-input" value={repo} onChange={e => setRepo(e.target.value)} placeholder="org/repo" />
+              </section>
+            ) : (
+              <>
+                {/* ─── Repository Picker ─── */}
+                <section className="neo-card">
+                  <h2 style={{ marginBottom: '20px' }}>Generate Documentation</h2>
+                  
+                  <div style={{ marginBottom: '20px', position: 'relative' }}>
+                    <label style={{ display: 'block', marginBottom: '8px', opacity: 0.8, fontWeight: 700 }}>Select Repository</label>
+                    <div 
+                      className="neo-input" 
+                      onClick={() => setDropdownOpen(!dropdownOpen)}
+                      style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                    >
+                      {selectedRepo ? (
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          {selectedRepo.private && <Lock size={14} />}
+                          {selectedRepo.full_name}
+                        </span>
+                      ) : (
+                        <span style={{ opacity: 0.5 }}>{reposLoading ? 'Loading repositories...' : 'Choose a repository...'}</span>
+                      )}
+                      <ChevronDown size={16} />
                     </div>
-                    <div>
-                      <label style={{ display: 'block', marginBottom: '8px', opacity: 0.8 }}>Branch/SHA</label>
-                      <input className="neo-input" value={sha} onChange={e => setSha(e.target.value)} placeholder="main" />
-                    </div>
+
+                    {dropdownOpen && (
+                      <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'white', border: '3px solid #000', zIndex: 100, maxHeight: '300px', overflowY: 'auto' }}>
+                        <input 
+                          className="neo-input"
+                          value={repoSearch}
+                          onChange={e => setRepoSearch(e.target.value)}
+                          placeholder="Search repos..."
+                          style={{ borderBottom: '2px solid #eee', position: 'sticky', top: 0, background: 'white' }}
+                          autoFocus
+                          onClick={e => e.stopPropagation()}
+                        />
+                        {filteredRepos.length === 0 && (
+                          <div style={{ padding: '16px', opacity: 0.5, textAlign: 'center' }}>No repos found</div>
+                        )}
+                        {filteredRepos.map(r => (
+                          <div 
+                            key={r.full_name} 
+                            onClick={() => handleSelectRepo(r)}
+                            style={{ padding: '12px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid #eee', fontWeight: 600, transition: 'background 0.1s' }}
+                            onMouseEnter={e => e.currentTarget.style.background = '#f5f5f5'}
+                            onMouseLeave={e => e.currentTarget.style.background = 'white'}
+                          >
+                            {r.private ? <Lock size={14} color="#888" /> : <Code size={14} color="#888" />}
+                            {r.full_name}
+                            <span style={{ marginLeft: 'auto', fontSize: '0.75rem', opacity: 0.5 }}>{r.default_branch}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  <button className="neo-button" onClick={triggerDocs} disabled={loading} style={{ width: '100%', justifyContent: 'center', background: 'var(--accent)' }}>
-                    {loading ? <RefreshCw className="spinner" /> : <Send size={20} />} Generate & Pull Request
-                  </button>
-                </>
-              )}
-            </section>
-            
-            <section>
+
+                  {selectedRepo && (
+                    <div style={{ marginBottom: '20px' }}>
+                      <label style={{ display: 'block', marginBottom: '8px', opacity: 0.8, fontWeight: 700 }}>
+                        <GitBranch size={14} style={{ display: 'inline', verticalAlign: 'middle' }} /> Branch
+                      </label>
+                      <input className="neo-input" value={branch} onChange={e => setBranch(e.target.value)} />
+                    </div>
+                  )}
+
+                  {selectedRepo && !preview && (
+                    <button className="neo-button" onClick={handleGenerate} disabled={generating} style={{ width: '100%', justifyContent: 'center', background: 'var(--accent)', padding: '16px', fontSize: '1.1rem' }}>
+                      {generating ? <><RefreshCw className="spinner" size={20} /> Generating... (this may take a minute)</> : <><Eye size={20} /> Generate README Preview</>}
+                    </button>
+                  )}
+                </section>
+
+                {/* ─── README Preview ─── */}
+                {preview && (
+                  <motion.section className="neo-card" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+                    <h2 style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <Eye size={24} /> Generated README Preview
+                    </h2>
+                    <div style={{ background: '#f8f9fa', border: '2px solid #eee', padding: '24px', marginBottom: '20px', maxHeight: '500px', overflowY: 'auto', fontFamily: 'monospace', fontSize: '0.85rem', lineHeight: 1.7, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                      {preview.readme}
+                    </div>
+                    <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                      <button className="neo-button" onClick={handlePush} disabled={pushing} style={{ flex: 1, justifyContent: 'center', background: 'var(--accent)', padding: '16px', fontSize: '1rem' }}>
+                        {pushing ? <><RefreshCw className="spinner" size={16} /> Pushing...</> : <><CheckCircle2 size={16} /> Approve & Push to GitHub</>}
+                      </button>
+                      <button className="neo-button" onClick={handleGenerate} disabled={generating} style={{ flex: 1, justifyContent: 'center', background: 'var(--primary)', padding: '16px', fontSize: '1rem' }}>
+                        {generating ? <><RefreshCw className="spinner" size={16} /> Regenerating...</> : <><RefreshCw size={16} /> Regenerate</>}
+                      </button>
+                    </div>
+                  </motion.section>
+                )}
+              </>
+            )}
+
+            {/* ─── Job History ─── */}
+            <section style={{ marginTop: '24px' }}>
               <h2 style={{ marginBottom: '20px' }}>Recent Jobs</h2>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 {jobs.length === 0 && <p style={{ opacity: 0.5 }}>No jobs found yet...</p>}
-                {jobs.map(job => (
+                {jobs.filter(j => j.status !== 'preview').map(job => (
                   <div key={job.id} className="neo-card" style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '16px' }}>
                     <div>
                       <h3 style={{ fontSize: '1.1rem' }}>{job.repo_name}</h3>
@@ -212,6 +342,7 @@ function Dashboard({ user, onLogout }) {
           </motion.div>
         ) : (
           <motion.div key="admin" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+            {/* ─── Admin Analytics ─── */}
             {analytics && (
               <section className="neo-card" style={{ marginBottom: '24px' }}>
                 <h2 style={{ marginBottom: '20px' }}>Platform Analytics</h2>
@@ -237,22 +368,31 @@ function Dashboard({ user, onLogout }) {
                 </div>
               </section>
             )}
+
+            {/* ─── User Management Table ─── */}
             <section className="neo-card">
               <h2 style={{ marginBottom: '20px' }}>User Management</h2>
               <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '600px' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '700px' }}>
                   <thead>
                     <tr style={{ borderBottom: '3px solid #000' }}>
+                      <th style={{ textAlign: 'left', padding: '12px' }}>Name</th>
                       <th style={{ textAlign: 'left', padding: '12px' }}>Email</th>
+                      <th style={{ textAlign: 'left', padding: '12px' }}>GitHub</th>
                       <th style={{ textAlign: 'left', padding: '12px' }}>Role</th>
                       <th style={{ textAlign: 'left', padding: '12px' }}>Status</th>
+                      <th style={{ textAlign: 'left', padding: '12px' }}>Joined</th>
                       <th style={{ textAlign: 'left', padding: '12px' }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {users.map(u => (
                       <tr key={u.id} style={{ borderBottom: '2px solid #eee' }}>
-                        <td style={{ padding: '12px', fontWeight: 600 }}>{u.email}</td>
+                        <td style={{ padding: '12px', fontWeight: 600 }}>{u.full_name || '—'}</td>
+                        <td style={{ padding: '12px', fontSize: '0.85rem' }}>{u.email}</td>
+                        <td style={{ padding: '12px' }}>
+                          {u.has_github ? <CheckCircle2 size={16} color="green" /> : <AlertCircle size={16} color="#ccc" />}
+                        </td>
                         <td style={{ padding: '12px' }}>
                           <button onClick={() => toggleUserAdmin(u.id)} className="neo-button" style={{ padding: '4px 8px', fontSize: '0.7rem', background: u.is_admin ? 'var(--primary)' : 'white' }}>
                             {u.is_admin ? 'Admin' : 'User'}
@@ -262,6 +402,9 @@ function Dashboard({ user, onLogout }) {
                           <span style={{ padding: '4px 8px', background: u.is_active ? 'var(--accent)' : 'var(--secondary)', fontWeight: 800, fontSize: '0.7rem' }}>
                             {u.is_active ? 'ACTIVE' : 'BANNED'}
                           </span>
+                        </td>
+                        <td style={{ padding: '12px', fontSize: '0.8rem', opacity: 0.6 }}>
+                          {new Date(u.created_at).toLocaleDateString()}
                         </td>
                         <td style={{ padding: '12px' }}>
                           <button className="neo-button" style={{ padding: '4px 8px', fontSize: '0.7rem', background: u.is_active ? 'var(--secondary)' : 'var(--accent)' }} onClick={() => toggleUserActive(u.id)}>
@@ -281,17 +424,18 @@ function Dashboard({ user, onLogout }) {
   );
 }
 
+// ─── Footer ─────────────────────────────────────────────────────
 const Footer = () => (
   <footer style={{ textAlign: 'center', padding: '40px 20px', opacity: 0.6, fontSize: '0.9rem', fontWeight: 700, marginTop: 'auto' }}>
     © {new Date().getFullYear()} Ravi Yadav @ Shoolini University GF202218734
   </footer>
 );
 
+// ─── Landing Page ───────────────────────────────────────────────
 const LandingPage = () => {
   const navigate = useNavigate();
   return (
     <div className="landing-container" style={{ minHeight: '100vh', position: 'relative', overflow: 'hidden' }}>
-      {/* Background Elements */}
       <div className="bg-glow" style={{ position: 'absolute', top: '-10%', right: '-10%', width: '40vw', height: '40vw', background: 'var(--accent)', filter: 'blur(150px)', opacity: 0.1, zIndex: 0 }}></div>
       <div className="bg-glow" style={{ position: 'absolute', bottom: '-10%', left: '-10%', width: '40vw', height: '40vw', background: 'var(--primary)', filter: 'blur(150px)', opacity: 0.1, zIndex: 0 }}></div>
 
@@ -311,13 +455,8 @@ const LandingPage = () => {
       </nav>
 
       <main style={{ maxWidth: '1200px', margin: '0 auto', padding: '100px 20px', position: 'relative', zIndex: 10 }}>
-        {/* Hero Section */}
         <section style={{ textAlign: 'center', marginBottom: '150px' }}>
-          <motion.div
-            initial={{ y: 50, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ duration: 0.8, ease: "easeOut" }}
-          >
+          <motion.div initial={{ y: 50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ duration: 0.8, ease: "easeOut" }}>
             <span style={{ background: 'var(--accent)', color: 'white', padding: '8px 20px', borderRadius: '50px', fontSize: '0.9rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '2px', marginBottom: '24px', display: 'inline-block' }}>
               The Future of Open Source
             </span>
@@ -339,11 +478,8 @@ const LandingPage = () => {
           </motion.div>
         </section>
 
-        {/* Floating Code Snippet Preview */}
         <motion.div 
-          initial={{ y: 100, opacity: 0 }}
-          whileInView={{ y: 0, opacity: 1 }}
-          viewport={{ once: true }}
+          initial={{ y: 100, opacity: 0 }} whileInView={{ y: 0, opacity: 1 }} viewport={{ once: true }}
           className="neo-card"
           style={{ background: '#1a1a1a', color: '#fff', padding: '20px', borderRadius: '20px', maxWidth: '800px', margin: '0 auto 150px auto', transform: 'rotate(-2deg)', boxShadow: '20px 20px 0px var(--primary)' }}
         >
@@ -361,7 +497,6 @@ const LandingPage = () => {
           </code>
         </motion.div>
 
-        {/* Features Grid */}
         <section style={{ marginBottom: '150px' }}>
           <div style={{ textAlign: 'center', marginBottom: '60px' }}>
             <h2 style={{ fontSize: '3rem', fontWeight: 950, letterSpacing: '-2px' }}>Ghost-Level Capabilities</h2>
@@ -373,14 +508,7 @@ const LandingPage = () => {
               { title: 'Diagram Generation', desc: 'Visualizes your architecture with Mermaid.js diagrams generated by AI.', icon: <RefreshCw size={32} /> },
               { title: 'Multi-Repo Support', desc: 'Manage documentation for your entire organization from one dashboard.', icon: <Shield size={32} /> }
             ].map((feat, i) => (
-              <motion.div 
-                key={i} 
-                initial={{ y: 30, opacity: 0 }} 
-                whileInView={{ y: 0, opacity: 1 }} 
-                viewport={{ once: true }} 
-                transition={{ delay: i * 0.1 }} 
-                className="feature-card neo-card"
-              >
+              <motion.div key={i} initial={{ y: 30, opacity: 0 }} whileInView={{ y: 0, opacity: 1 }} viewport={{ once: true }} transition={{ delay: i * 0.1 }} className="feature-card neo-card">
                 <div style={{ width: '60px', height: '60px', background: 'var(--primary)', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '25px', color: 'white' }}>
                   {feat.icon}
                 </div>
@@ -391,7 +519,6 @@ const LandingPage = () => {
           </div>
         </section>
 
-        {/* CTA Section */}
         <section style={{ background: 'var(--primary)', padding: '80px 40px', borderRadius: '30px', textAlign: 'center', color: 'white' }}>
           <h2 style={{ fontSize: '3.5rem', fontWeight: 950, marginBottom: '20px', letterSpacing: '-2px' }}>Ready to haunt your repos?</h2>
           <p style={{ fontSize: '1.3rem', marginBottom: '40px', opacity: 0.9 }}>Join 1,000+ developers automating their documentation.</p>
@@ -404,6 +531,7 @@ const LandingPage = () => {
   );
 };
 
+// ─── Main App Router ────────────────────────────────────────────
 function MainApp() {
   const [user, setUser] = useState(() => JSON.parse(localStorage.getItem('user')));
   const navigate = useNavigate();
@@ -433,11 +561,13 @@ function MainApp() {
           localStorage.setItem('user', JSON.stringify(updatedUser));
           localStorage.removeItem('github_intent');
         } catch(e) {}
+        navigate('/dashboard');
       } else {
         loginSuccess(data);
       }
     } catch (e) { 
       alert(`GitHub Auth failed: ${e.response?.data?.detail || e.message}`); 
+      navigate('/login');
     }
   };
 
@@ -446,7 +576,7 @@ function MainApp() {
     const code = params.get('code');
     if (code) {
       handleGithubCallback(code);
-      window.history.replaceState({}, document.title, "/");
+      window.history.replaceState({}, document.title, "/dashboard");
     }
   }, []);
 
@@ -462,7 +592,7 @@ function MainApp() {
       <Routes>
         <Route path="/" element={user ? <Navigate to="/dashboard" /> : <LandingPage />} />
         <Route path="/login" element={<UserLogin onLoginSuccess={loginSuccess} />} />
-        <Route path="/dashboard" element={user ? <Dashboard user={user} onLogout={handleLogout} /> : <Navigate to="/login" />} />
+        <Route path="/dashboard" element={user ? <Dashboard user={user} onLogout={handleLogout} setUser={setUser} /> : <Navigate to="/login" />} />
       </Routes>
       <Footer />
     </>

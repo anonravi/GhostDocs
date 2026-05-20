@@ -2,6 +2,8 @@ import os
 from github import Github
 from typing import Dict, Any, List
 
+HEADERS = {"User-Agent": "GhostDocs/1.0"}
+
 class GitHubClient:
     def __init__(self, token: str = None):
         self.token = token or os.getenv("GITHUB_TOKEN")

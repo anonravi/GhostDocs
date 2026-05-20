@@ -1,7 +1,7 @@
 from dotenv import load_dotenv
 load_dotenv()
 
-from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks, Security
+from fastapi import FastAPI, Depends, HTTPException, Security
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
@@ -10,16 +10,22 @@ import uuid
 import os
 import jwt
 from datetime import datetime, timedelta
-from . import models, database, schemas, ast_parser, agent, github_client
-from .worker import process_docs_task
+from . import models, database, schemas, worker
+from fastapi.responses import JSONResponse
+import logging
+import httpx
 
 app = FastAPI(title="GhostDocs API")
 security = HTTPBearer()
 
 JWT_SECRET = os.getenv("JWT_SECRET", "super-secret-bone")
 JWT_ALGORITHM = "HS256"
+GH_HEADERS = {"User-Agent": "GhostDocs/1.0", "Accept": "application/json"}
 
-# Security Helpers
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# ─── Security Helpers ───────────────────────────────────────────
 def create_access_token(data: dict):
     to_encode = data.copy()
     expire = datetime.utcnow() + timedelta(days=7)
@@ -45,19 +51,14 @@ async def get_current_admin(current_user: models.User = Depends(get_current_user
         raise HTTPException(status_code=403, detail="Admin only cave")
     return current_user
 
+# ─── Middleware ──────────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # Should be restricted in production!
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-from fastapi.responses import JSONResponse
-import logging
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc):
@@ -70,36 +71,140 @@ async def global_exception_handler(request, exc):
 # Initialize Database Tables
 models.Base.metadata.create_all(bind=database.engine)
 
+# ─── Health ──────────────────────────────────────────────────────
 @app.get("/health")
 async def health(db: Session = Depends(database.get_db)):
     db.query(models.User).count()
     return {"status": "healthy", "database": "connected"}
 
-@app.post("/generate", response_model=schemas.JobResponse)
-async def generate_docs(payload: schemas.GenerateRequest, user: models.User = Depends(get_current_user), db: Session = Depends(database.get_db)):
-    # Use user's token if available, otherwise fallback to global
-    gh_token = user.github_token or os.getenv("GITHUB_TOKEN")
+# ─── Repository Listing ─────────────────────────────────────────
+@app.get("/repos", response_model=List[schemas.RepoResponse])
+async def list_repos(user: models.User = Depends(get_current_user)):
+    if not user.github_token:
+        raise HTTPException(400, "GitHub not connected. Please connect GitHub first.")
     
+    try:
+        async with httpx.AsyncClient() as client:
+            repos = []
+            page = 1
+            while True:
+                res = await client.get(
+                    f"https://api.github.com/user/repos?per_page=100&page={page}&sort=updated&affiliation=owner,collaborator,organization_member",
+                    headers={**GH_HEADERS, "Authorization": f"Bearer {user.github_token}"}
+                )
+                if res.status_code != 200:
+                    raise HTTPException(502, f"GitHub API error: {res.text}")
+                data = res.json()
+                if not data:
+                    break
+                for r in data:
+                    repos.append({
+                        "full_name": r["full_name"],
+                        "private": r["private"],
+                        "default_branch": r.get("default_branch", "main")
+                    })
+                page += 1
+                if len(data) < 100:
+                    break
+            return repos
+    except httpx.RequestError as e:
+        raise HTTPException(502, f"Failed to reach GitHub: {str(e)}")
+
+# ─── Generate Preview (Synchronous) ─────────────────────────────
+@app.post("/generate/preview")
+async def generate_preview(payload: schemas.PreviewRequest, user: models.User = Depends(get_current_user), db: Session = Depends(database.get_db)):
+    gh_token = user.github_token or os.getenv("GITHUB_TOKEN")
+    if not gh_token:
+        raise HTTPException(400, "No GitHub token available. Connect GitHub first.")
+
     job_id = str(uuid.uuid4())
     db_job = models.Job(
         id=job_id,
+        user_id=user.id,
         repo_name=payload.repo_name,
-        commit_sha=payload.commit_sha,
-        status="pending"
+        commit_sha=payload.branch,
+        status="processing"
     )
     db.add(db_job)
     db.commit()
-    db.refresh(db_job)
-    process_docs_task.delay(job_id, payload.repo_name, payload.commit_sha, gh_token)
-    return db_job
 
+    try:
+        docs = worker.generate_docs_only(payload.repo_name, payload.branch, gh_token)
+        
+        db_job.status = "preview"
+        db_job.artifacts = docs
+        db.commit()
+        db.refresh(db_job)
+
+        return {
+            "job_id": job_id,
+            "readme": docs.get("readme", ""),
+            "api_docs": docs.get("api_docs", ""),
+            "mermaid_diagram": docs.get("mermaid_diagram", "")
+        }
+    except Exception as e:
+        db_job.status = "failed"
+        db_job.error_message = str(e)
+        db.commit()
+        raise HTTPException(500, f"Generation failed: {str(e)}")
+
+# ─── Push Approved Docs to GitHub ────────────────────────────────
+@app.post("/generate/push")
+async def push_to_github(payload: schemas.PushRequest, user: models.User = Depends(get_current_user), db: Session = Depends(database.get_db)):
+    job = db.query(models.Job).filter(models.Job.id == payload.job_id).first()
+    if not job:
+        raise HTTPException(404, "Job not found")
+    if job.status != "preview":
+        raise HTTPException(400, f"Job is in '{job.status}' state, not 'preview'. Cannot push.")
+    if not job.artifacts:
+        raise HTTPException(400, "No generated docs found for this job.")
+
+    gh_token = user.github_token or os.getenv("GITHUB_TOKEN")
+    if not gh_token:
+        raise HTTPException(400, "No GitHub token available.")
+
+    try:
+        pr_url = worker.push_docs_to_github(
+            repo_name=job.repo_name,
+            base_branch=job.commit_sha,
+            docs=job.artifacts,
+            commit_sha=job.commit_sha,
+            job_id=job.id,
+            gh_token=gh_token
+        )
+        job.status = "completed"
+        job.pr_url = pr_url
+        db.commit()
+        return {"status": "completed", "pr_url": pr_url}
+    except Exception as e:
+        job.status = "failed"
+        job.error_message = str(e)
+        db.commit()
+        raise HTTPException(500, f"Push failed: {str(e)}")
+
+# ─── Job History (Scoped to User) ───────────────────────────────
 @app.get("/jobs", response_model=List[schemas.JobResponse])
 async def list_jobs(user: models.User = Depends(get_current_user), db: Session = Depends(database.get_db)):
-    return db.query(models.Job).all()
+    if user.is_admin:
+        return db.query(models.Job).order_by(models.Job.created_at.desc()).all()
+    return db.query(models.Job).filter(models.Job.user_id == user.id).order_by(models.Job.created_at.desc()).all()
 
+# ─── Admin: User Management ─────────────────────────────────────
 @app.get("/users", response_model=List[schemas.UserResponse])
 async def list_users(admin: models.User = Depends(get_current_admin), db: Session = Depends(database.get_db)):
-    return db.query(models.User).all()
+    users = db.query(models.User).all()
+    return [
+        {
+            "id": u.id,
+            "email": u.email,
+            "full_name": u.full_name,
+            "is_admin": u.is_admin,
+            "is_active": u.is_active,
+            "has_github": bool(u.github_token),
+            "created_at": u.created_at,
+        }
+        for u in users
+    ]
 
 @app.post("/users/{user_id}/toggle-active")
 async def toggle_user_active(user_id: int, admin: models.User = Depends(get_current_admin), db: Session = Depends(database.get_db)):
@@ -108,6 +213,16 @@ async def toggle_user_active(user_id: int, admin: models.User = Depends(get_curr
     user.is_active = 0 if user.is_active == 1 else 1
     db.commit()
     return {"message": "User status updated"}
+
+@app.post("/users/{user_id}/toggle-admin")
+async def toggle_user_admin(user_id: int, admin: models.User = Depends(get_current_admin), db: Session = Depends(database.get_db)):
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user: raise HTTPException(status_code=404, detail="User not found")
+    user.is_admin = 0 if user.is_admin == 1 else 1
+    db.commit()
+    return {"message": "User role updated"}
+
+# ─── Admin: Analytics ────────────────────────────────────────────
 @app.get("/admin/analytics")
 async def get_admin_analytics(admin: models.User = Depends(get_current_admin), db: Session = Depends(database.get_db)):
     total_users = db.query(models.User).count()
@@ -125,71 +240,20 @@ async def get_admin_analytics(admin: models.User = Depends(get_current_admin), d
         "system_health": "Optimal"
     }
 
-@app.post("/users/{user_id}/toggle-admin")
-async def toggle_user_admin(user_id: int, admin: models.User = Depends(get_current_admin), db: Session = Depends(database.get_db)):
-    user = db.query(models.User).filter(models.User.id == user_id).first()
-    if not user: raise HTTPException(status_code=404, detail="User not found")
-    user.is_admin = 0 if user.is_admin == 1 else 1
-    db.commit()
-    return {"message": "User role updated"}
-
-# Auth Routes
+# ─── Auth: Google OAuth ─────────────────────────────────────────
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
-
-from passlib.context import CryptContext
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-@app.post("/auth/register")
-async def register(req: dict, db: Session = Depends(database.get_db)):
-    email = req.get("email")
-    password = req.get("password")
-    name = req.get("name", email.split('@')[0])
-    
-    if not email or not password: raise HTTPException(400, "Missing fields")
-    if db.query(models.User).filter(models.User.email == email).first():
-        raise HTTPException(400, "Account already exists")
-    
-    is_first = db.query(models.User).count() == 0
-    hashed = pwd_context.hash(password)
-    user = models.User(email=email, full_name=name, hashed_password=hashed, is_admin=1 if is_first else 0)
-    db.add(user)
-    db.commit()
-    db.refresh(user)
-    
-    access_token = create_access_token(data={"sub": user.email})
-    return {**user.__dict__, "access_token": access_token, "has_github": bool(user.github_token)}
-
-@app.post("/auth/login")
-async def login(req: dict, db: Session = Depends(database.get_db)):
-    email = req.get("email")
-    password = req.get("password")
-    user = db.query(models.User).filter(models.User.email == email).first()
-    if not user or not user.hashed_password: raise HTTPException(401, "Invalid credentials")
-    if not pwd_context.verify(password, user.hashed_password):
-        raise HTTPException(401, "Invalid credentials")
-    
-    if not user.is_active: raise HTTPException(403, "Banned")
-    
-    access_token = create_access_token(data={"sub": user.email})
-    return {
-        "id": user.id, "email": user.email, "name": user.full_name, 
-        "is_admin": bool(user.is_admin), "access_token": access_token,
-        "has_github": bool(user.github_token)
-    }
 
 @app.post("/auth/google")
 async def google_auth(req: dict, db: Session = Depends(database.get_db)):
     if not req:
         return JSONResponse(status_code=400, content={"detail": "Ghost request"})
     
-    print(f"DEBUG: Google Auth Req Body: {req}")
     token = req.get("token") or req.get("credential")
     if not token:
         raise HTTPException(400, "Token is missing from request")
     
     if req.get("is_access_token"):
-        import httpx
         async with httpx.AsyncClient() as client:
             res = await client.get("https://www.googleapis.com/oauth2/v3/userinfo", headers={"Authorization": f"Bearer {token}"})
             if res.status_code != 200: raise HTTPException(401, "Invalid Google Access Token")
@@ -218,23 +282,21 @@ async def google_auth(req: dict, db: Session = Depends(database.get_db)):
         "has_github": bool(user.github_token)
     }
 
+# ─── Auth: GitHub OAuth (Login) ─────────────────────────────────
 @app.post("/auth/github")
 async def github_auth(data: dict, db: Session = Depends(database.get_db)):
     code = data.get("code")
-    import httpx
-    # Get token from GitHub
     try:
         async with httpx.AsyncClient() as client:
-            res = await client.post("https://github.com/login/oauth/access_token", headers={"Accept": "application/json"}, data={
+            res = await client.post("https://github.com/login/oauth/access_token", headers=GH_HEADERS, data={
                 "client_id": os.getenv("GITHUB_CLIENT_ID"),
                 "client_secret": os.getenv("GITHUB_CLIENT_SECRET"),
                 "code": code
             })
             gh_token = res.json().get("access_token")
-            if not gh_token: raise HTTPException(401, f"Invalid GitHub Code or missing secrets: {res.text}")
+            if not gh_token: raise HTTPException(401, f"Invalid GitHub Code: {res.text}")
 
-            # Get user info
-            res = await client.get("https://api.github.com/user", headers={"Authorization": f"Bearer {gh_token}"})
+            res = await client.get("https://api.github.com/user", headers={**GH_HEADERS, "Authorization": f"Bearer {gh_token}"})
             gh_user = res.json()
             email = gh_user.get("email") or f"{gh_user.get('login', 'unknown')}@github.com"
             
@@ -263,19 +325,19 @@ async def github_auth(data: dict, db: Session = Depends(database.get_db)):
         "has_github": bool(user.github_token)
     }
 
+# ─── Auth: GitHub Connect (Link to existing account) ────────────
 @app.post("/auth/github/connect")
 async def connect_github(data: dict, user: models.User = Depends(get_current_user), db: Session = Depends(database.get_db)):
     code = data.get("code")
-    import httpx
     try:
         async with httpx.AsyncClient() as client:
-            res = await client.post("https://github.com/login/oauth/access_token", headers={"Accept": "application/json"}, data={
+            res = await client.post("https://github.com/login/oauth/access_token", headers=GH_HEADERS, data={
                 "client_id": os.getenv("GITHUB_CLIENT_ID"),
                 "client_secret": os.getenv("GITHUB_CLIENT_SECRET"),
                 "code": code
             })
             gh_token = res.json().get("access_token")
-            if not gh_token: raise HTTPException(401, f"Invalid GitHub Code or missing secrets: {res.text}")
+            if not gh_token: raise HTTPException(401, f"Invalid GitHub Code: {res.text}")
             
             user.github_token = gh_token
             db.commit()
