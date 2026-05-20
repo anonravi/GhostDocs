@@ -133,6 +133,8 @@ function Dashboard({ user, onLogout }) {
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
 
+  const [analytics, setAnalytics] = useState(null);
+
   const fetchData = async () => {
     try {
       const jRes = await axios.get(`${API_URL}/jobs`);
@@ -140,6 +142,8 @@ function Dashboard({ user, onLogout }) {
       if (user?.is_admin) {
         const uRes = await axios.get(`${API_URL}/users`);
         setUsers(uRes.data);
+        const aRes = await axios.get(`${API_URL}/admin/analytics`);
+        setAnalytics(aRes.data);
       }
     } catch (e) { if (e.response?.status === 401) onLogout(); }
   };
@@ -230,6 +234,31 @@ function Dashboard({ user, onLogout }) {
           </motion.div>
         ) : (
           <motion.div key="admin" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+            {analytics && (
+              <section className="neo-card" style={{ marginBottom: '24px' }}>
+                <h2 style={{ marginBottom: '20px' }}>Platform Analytics</h2>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '16px' }}>
+                  <div style={{ background: 'white', padding: '16px', border: '3px solid #000', borderBottom: '6px solid #000', borderRight: '6px solid #000' }}>
+                    <h3 style={{ fontSize: '0.9rem', opacity: 0.7, textTransform: 'uppercase' }}>Total Users</h3>
+                    <p style={{ fontSize: '2rem', fontWeight: 900 }}>{analytics.total_users}</p>
+                  </div>
+                  <div style={{ background: 'var(--primary)', padding: '16px', border: '3px solid #000', borderBottom: '6px solid #000', borderRight: '6px solid #000' }}>
+                    <h3 style={{ fontSize: '0.9rem', opacity: 0.7, textTransform: 'uppercase' }}>Total Jobs</h3>
+                    <p style={{ fontSize: '2rem', fontWeight: 900 }}>{analytics.total_jobs}</p>
+                  </div>
+                  <div style={{ background: 'var(--accent)', padding: '16px', border: '3px solid #000', borderBottom: '6px solid #000', borderRight: '6px solid #000' }}>
+                    <h3 style={{ fontSize: '0.9rem', opacity: 0.7, textTransform: 'uppercase' }}>Success Rate</h3>
+                    <p style={{ fontSize: '2rem', fontWeight: 900 }}>
+                      {analytics.total_jobs > 0 ? Math.round((analytics.completed_jobs / analytics.total_jobs) * 100) : 0}%
+                    </p>
+                  </div>
+                  <div style={{ background: 'white', padding: '16px', border: '3px solid #000', borderBottom: '6px solid #000', borderRight: '6px solid #000' }}>
+                    <h3 style={{ fontSize: '0.9rem', opacity: 0.7, textTransform: 'uppercase' }}>System Health</h3>
+                    <p style={{ fontSize: '1.2rem', fontWeight: 900, marginTop: '8px', color: 'green' }}>{analytics.system_health}</p>
+                  </div>
+                </div>
+              </section>
+            )}
             <section className="neo-card">
               <h2 style={{ marginBottom: '20px' }}>User Management</h2>
               <div style={{ overflowX: 'auto' }}>

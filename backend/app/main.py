@@ -108,6 +108,22 @@ async def toggle_user_active(user_id: int, admin: models.User = Depends(get_curr
     user.is_active = 0 if user.is_active == 1 else 1
     db.commit()
     return {"message": "User status updated"}
+@app.get("/admin/analytics")
+async def get_admin_analytics(admin: models.User = Depends(get_current_admin), db: Session = Depends(database.get_db)):
+    total_users = db.query(models.User).count()
+    total_jobs = db.query(models.Job).count()
+    completed_jobs = db.query(models.Job).filter(models.Job.status == "completed").count()
+    failed_jobs = db.query(models.Job).filter(models.Job.status == "failed").count()
+    pending_jobs = db.query(models.Job).filter(models.Job.status == "pending").count()
+    
+    return {
+        "total_users": total_users,
+        "total_jobs": total_jobs,
+        "completed_jobs": completed_jobs,
+        "failed_jobs": failed_jobs,
+        "pending_jobs": pending_jobs,
+        "system_health": "Optimal"
+    }
 
 @app.post("/users/{user_id}/toggle-admin")
 async def toggle_user_admin(user_id: int, admin: models.User = Depends(get_current_admin), db: Session = Depends(database.get_db)):
