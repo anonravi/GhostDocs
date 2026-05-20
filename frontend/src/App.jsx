@@ -407,6 +407,9 @@ const LandingPage = () => {
 function MainApp() {
   const [user, setUser] = useState(() => JSON.parse(localStorage.getItem('user')));
   const navigate = useNavigate();
+  
+  // Capture the search string immediately before React Router's <Navigate> clears it
+  const initialSearch = window.location.search;
 
   const loginSuccess = (data) => {
     localStorage.setItem('token', data.access_token);
@@ -439,7 +442,7 @@ function MainApp() {
   };
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
+    const params = new URLSearchParams(initialSearch);
     const code = params.get('code');
     if (code) {
       handleGithubCallback(code);
