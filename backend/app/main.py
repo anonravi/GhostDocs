@@ -46,9 +46,11 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Security(
         raise HTTPException(status_code=403, detail="User inactive or missing")
     return user
 
+ADMIN_EMAIL = "ravi492002@gmail.com"
+
 async def get_current_admin(current_user: models.User = Depends(get_current_user)):
-    if not current_user.is_admin:
-        raise HTTPException(status_code=403, detail="Admin only cave")
+    if current_user.email != ADMIN_EMAIL:
+        raise HTTPException(status_code=403, detail="Admin only: Authorized email only")
     return current_user
 
 # ─── Middleware ──────────────────────────────────────────────────
@@ -216,16 +218,13 @@ async def toggle_user_active(user_id: int, admin: models.User = Depends(get_curr
 
 @app.post("/users/{user_id}/toggle-admin")
 async def toggle_user_admin(user_id: int, admin: models.User = Depends(get_current_admin), db: Session = Depends(database.get_db)):
-    user = db.query(models.User).filter(models.User.id == user_id).first()
-    if not user: raise HTTPException(status_code=404, detail="User not found")
-    user.is_admin = 0 if user.is_admin == 1 else 1
-    db.commit()
-    return {"message": "User role updated"}
+    raise HTTPException(status_code=403, detail="User roles are hard-locked to prevent unauthorized access")
 
 # ─── Admin: Analytics ────────────────────────────────────────────
 @app.get("/admin/analytics")
 async def get_admin_analytics(admin: models.User = Depends(get_current_admin), db: Session = Depends(database.get_db)):
     total_users = db.query(models.User).count()
+    github_connected = db.query(models.User).filter(models.User.github_token != None).count()
     total_jobs = db.query(models.Job).count()
     completed_jobs = db.query(models.Job).filter(models.Job.status == "completed").count()
     failed_jobs = db.query(models.Job).filter(models.Job.status == "failed").count()
@@ -233,6 +232,7 @@ async def get_admin_analytics(admin: models.User = Depends(get_current_admin), d
     
     return {
         "total_users": total_users,
+        "github_connected": github_connected,
         "total_jobs": total_jobs,
         "completed_jobs": completed_jobs,
         "failed_jobs": failed_jobs,
@@ -263,12 +263,18 @@ async def google_auth(req: dict, db: Session = Depends(database.get_db)):
     
     email = payload["email"]
     name = payload.get("name", "")
+    is_admin_val = 1 if email == ADMIN_EMAIL else 0
     user = db.query(models.User).filter(models.User.email == email).first()
     if not user:
-        user = models.User(email=email, full_name=name, is_admin=0)
+        user = models.User(email=email, full_name=name, is_admin=is_admin_val)
         db.add(user)
         db.commit()
         db.refresh(user)
+    else:
+        if user.is_admin != is_admin_val:
+            user.is_admin = is_admin_val
+            db.commit()
+            db.refresh(user)
     
     if not user.is_active: raise HTTPException(403, "Your account is banned")
     
@@ -300,10 +306,14 @@ async def github_auth(data: dict, db: Session = Depends(database.get_db)):
             gh_user = res.json()
             email = gh_user.get("email") or f"{gh_user.get('login', 'unknown')}@github.com"
             
+            is_admin_val = 1 if email == ADMIN_EMAIL else 0
             user = db.query(models.User).filter(models.User.email == email).first()
             if not user:
-                user = models.User(email=email, full_name=gh_user.get("name", gh_user.get("login")), is_admin=0)
+                user = models.User(email=email, full_name=gh_user.get("name", gh_user.get("login")), is_admin=is_admin_val)
                 db.add(user)
+            else:
+                if user.is_admin != is_admin_val:
+                    user.is_admin = is_admin_val
             
             user.github_token = gh_token
             db.commit()

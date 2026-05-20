@@ -124,6 +124,10 @@ function Dashboard({ user, onLogout, setUser }) {
   const [preview, setPreview] = useState(null); // { job_id, readme, api_docs, mermaid_diagram }
   const [pushing, setPushing] = useState(false);
 
+  // Admin and Onboarding UI states
+  const [adminUserSearch, setAdminUserSearch] = useState('');
+  const [selectedJobLogs, setSelectedJobLogs] = useState(null);
+
   const fetchJobs = async () => {
     try {
       const jRes = await axios.get(`${API_URL}/jobs`);
@@ -204,6 +208,11 @@ function Dashboard({ user, onLogout, setUser }) {
 
   const filteredRepos = repos.filter(r => r.full_name.toLowerCase().includes(repoSearch.toLowerCase()));
 
+  const filteredUsers = users.filter(u => 
+    (u.full_name || '').toLowerCase().includes(adminUserSearch.toLowerCase()) ||
+    u.email.toLowerCase().includes(adminUserSearch.toLowerCase())
+  );
+
   return (
     <div className="container">
       <Navbar user={user} onLogout={onLogout} activeTab={activeTab} setActiveTab={setActiveTab} />
@@ -213,18 +222,111 @@ function Dashboard({ user, onLogout, setUser }) {
             
             {/* ─── GitHub Connection Gate ─── */}
             {!user?.has_github ? (
-              <section className="neo-card">
-                <div style={{ textAlign: 'center', padding: '40px 20px' }}>
-                  <AlertCircle size={40} color="#f44336" style={{ margin: '0 auto 16px auto', display: 'block' }} />
-                  <h3 style={{ marginBottom: '10px', color: '#b71c1c' }}>GitHub Connection Required</h3>
-                  <p style={{ marginBottom: '20px', color: '#c62828', maxWidth: '500px', margin: '0 auto 20px auto' }}>You need to link your GitHub account to allow GhostDocs to read your repositories and create pull requests.</p>
-                  <button className="neo-button" style={{ background: '#000', color: 'white', border: 'none', margin: '0 auto', display: 'flex' }} onClick={connectGithub}>
-                    <Users size={16} /> Connect GitHub Now
-                  </button>
+              <section className="neo-card" style={{ padding: '30px 24px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px', borderBottom: '3px solid #000', paddingBottom: '16px' }}>
+                  <Ghost size={36} className="floating" />
+                  <div>
+                    <h2 style={{ fontSize: '1.8rem', fontWeight: 900 }}>Welcome to GhostDocs! 👻</h2>
+                    <p style={{ fontSize: '0.95rem', opacity: 0.7, fontWeight: 700 }}>Let's get your autonomous documentation agent set up in a few simple steps.</p>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  {/* Step 1 */}
+                  <div style={{ 
+                    border: '3px solid #000', 
+                    padding: '20px', 
+                    background: 'white', 
+                    borderBottom: '6px solid #000', 
+                    borderRight: '6px solid #000',
+                    display: 'flex', 
+                    flexDirection: 'column', 
+                    gap: '12px' 
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <h4 style={{ fontSize: '1.1rem', fontWeight: 900, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '24px', height: '24px', borderRadius: '50%', background: 'var(--primary)', color: 'white', fontSize: '0.8rem' }}>1</span>
+                        Connect GitHub Profile
+                      </h4>
+                      <span style={{ background: 'var(--secondary)', padding: '4px 8px', fontSize: '0.75rem', fontWeight: 900, border: '2px solid #000' }}>REQUIRED</span>
+                    </div>
+                    <p style={{ fontSize: '0.9rem', fontWeight: 700, opacity: 0.8 }}>
+                      To pull repository structures, parse code abstract syntax trees (AST), and commit pull requests automatically, GhostDocs requires secure authorization.
+                    </p>
+                    <button className="neo-button" style={{ background: '#000', color: 'white', border: 'none', alignSelf: 'flex-start', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '8px' }} onClick={connectGithub}>
+                      <Users size={16} /> Link GitHub Profile
+                    </button>
+                  </div>
+
+                  {/* Step 2 */}
+                  <div style={{ 
+                    border: '3px solid #ccc', 
+                    padding: '20px', 
+                    background: '#fafafa', 
+                    opacity: 0.6,
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '12px' 
+                  }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '24px', height: '24px', borderRadius: '50%', background: '#ccc', color: 'white', fontSize: '0.8rem', fontWeight: 900 }}>2</span>
+                    <div>
+                      <h4 style={{ fontSize: '1rem', fontWeight: 900, color: '#666' }}>Choose a Repository</h4>
+                      <p style={{ fontSize: '0.85rem', fontWeight: 700, color: '#888', marginTop: '2px' }}>Search and choose from any of your public or private repositories.</p>
+                    </div>
+                  </div>
+
+                  {/* Step 3 */}
+                  <div style={{ 
+                    border: '3px solid #ccc', 
+                    padding: '20px', 
+                    background: '#fafafa', 
+                    opacity: 0.6,
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '12px' 
+                  }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '24px', height: '24px', borderRadius: '50%', background: '#ccc', color: 'white', fontSize: '0.8rem', fontWeight: 900 }}>3</span>
+                    <div>
+                      <h4 style={{ fontSize: '1rem', fontWeight: 900, color: '#666' }}>Review Generated README</h4>
+                      <p style={{ fontSize: '0.85rem', fontWeight: 700, color: '#888', marginTop: '2px' }}>Our AI parses functions, architectures, and generates an AST-grounded README + Mermaid diagrams.</p>
+                    </div>
+                  </div>
+
+                  {/* Step 4 */}
+                  <div style={{ 
+                    border: '3px solid #ccc', 
+                    padding: '20px', 
+                    background: '#fafafa', 
+                    opacity: 0.6,
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '12px' 
+                  }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '24px', height: '24px', borderRadius: '50%', background: '#ccc', color: 'white', fontSize: '0.8rem', fontWeight: 900 }}>4</span>
+                    <div>
+                      <h4 style={{ fontSize: '1rem', fontWeight: 900, color: '#666' }}>Push Pull Request</h4>
+                      <p style={{ fontSize: '0.85rem', fontWeight: 700, color: '#888', marginTop: '2px' }}>Approve & push directly to a new git branch and automatically open a PR for merging.</p>
+                    </div>
+                  </div>
                 </div>
               </section>
             ) : (
               <>
+                {/* ─── New User Welcome & Empty State Banner ─── */}
+                {jobs.filter(j => j.status !== 'preview').length === 0 && (
+                  <div className="neo-card" style={{ background: 'var(--primary)', color: 'black', marginBottom: '24px', padding: '24px', borderBottom: '6px solid #000', borderRight: '6px solid #000' }}>
+                    <h3 style={{ fontSize: '1.4rem', fontWeight: 900, marginBottom: '8px' }}>Welcome to GhostDocs, {user.name || 'Developer'}! 👻</h3>
+                    <p style={{ fontWeight: 700, opacity: 0.9, lineHeight: 1.4 }}>
+                      Your GitHub is connected successfully. You're ready to automate your documentation!
+                      Follow the quick guide below to generate your very first autonomous README.
+                    </p>
+                    <ol style={{ marginTop: '12px', paddingLeft: '20px', fontWeight: 800, fontSize: '0.95rem', display: 'flex', flexDirection: 'column', gap: '6px', listStyleType: 'decimal' }}>
+                      <li>Select your target repository from the search dropdown below.</li>
+                      <li>Click "Generate README Preview" to let our AI agent analyze the project architecture.</li>
+                      <li>Review the generated markdown, then click "Approve & Push to GitHub" to create a Pull Request automatically.</li>
+                    </ol>
+                  </div>
+                )}
                 {/* ─── Repository Picker ─── */}
                 <section className="neo-card">
                   <h2 style={{ marginBottom: '20px' }}>Generate Documentation</h2>
@@ -342,77 +444,214 @@ function Dashboard({ user, onLogout, setUser }) {
           </motion.div>
         ) : (
           <motion.div key="admin" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+            {/* ─── Admin Console Shield Header ─── */}
+            <div className="neo-card" style={{ background: '#fff', borderLeft: '10px solid var(--primary)', marginBottom: '24px', padding: '16px 24px', display: 'flex', alignItems: 'center', gap: '16px' }}>
+              <Shield size={32} color="var(--primary)" />
+              <div>
+                <h2 style={{ fontSize: '1.4rem', fontWeight: 900 }}>Admin Platform Console</h2>
+                <p style={{ fontSize: '0.85rem', fontWeight: 700, opacity: 0.7 }}>Securely restricted. Current Admin: <strong>ravi492002@gmail.com</strong></p>
+              </div>
+            </div>
+
             {/* ─── Admin Analytics ─── */}
             {analytics && (
-              <section className="neo-card" style={{ marginBottom: '24px' }}>
-                <h2 style={{ marginBottom: '20px' }}>Platform Analytics</h2>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '16px' }}>
-                  <div style={{ background: 'white', padding: '16px', border: '3px solid #000', borderBottom: '6px solid #000', borderRight: '6px solid #000' }}>
-                    <h3 style={{ fontSize: '0.9rem', opacity: 0.7, textTransform: 'uppercase' }}>Total Users</h3>
-                    <p style={{ fontSize: '2rem', fontWeight: 900 }}>{analytics.total_users}</p>
+              <section style={{ marginBottom: '32px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px' }}>
+                  <div style={{ background: 'white', padding: '20px', border: '3px solid #000', borderBottom: '6px solid #000', borderRight: '6px solid #000' }}>
+                    <h3 style={{ fontSize: '0.85rem', opacity: 0.7, textTransform: 'uppercase', fontWeight: 800 }}>Total Active Users</h3>
+                    <p style={{ fontSize: '2.5rem', fontWeight: 900, marginTop: '8px' }}>{analytics.total_users}</p>
                   </div>
-                  <div style={{ background: 'var(--primary)', padding: '16px', border: '3px solid #000', borderBottom: '6px solid #000', borderRight: '6px solid #000' }}>
-                    <h3 style={{ fontSize: '0.9rem', opacity: 0.7, textTransform: 'uppercase' }}>Total Jobs</h3>
-                    <p style={{ fontSize: '2rem', fontWeight: 900 }}>{analytics.total_jobs}</p>
-                  </div>
-                  <div style={{ background: 'var(--accent)', padding: '16px', border: '3px solid #000', borderBottom: '6px solid #000', borderRight: '6px solid #000' }}>
-                    <h3 style={{ fontSize: '0.9rem', opacity: 0.7, textTransform: 'uppercase' }}>Success Rate</h3>
-                    <p style={{ fontSize: '2rem', fontWeight: 900 }}>
-                      {analytics.total_jobs > 0 ? Math.round((analytics.completed_jobs / analytics.total_jobs) * 100) : 0}%
+                  <div style={{ background: 'var(--primary)', padding: '20px', border: '3px solid #000', borderBottom: '6px solid #000', borderRight: '6px solid #000' }}>
+                    <h3 style={{ fontSize: '0.85rem', opacity: 0.7, textTransform: 'uppercase', fontWeight: 800 }}>GitHub Linked</h3>
+                    <p style={{ fontSize: '2.5rem', fontWeight: 900, marginTop: '8px' }}>
+                      {analytics.github_connected} <span style={{ fontSize: '1.2rem', fontWeight: 700 }}>({analytics.total_users > 0 ? Math.round((analytics.github_connected / analytics.total_users) * 100) : 0}%)</span>
                     </p>
                   </div>
-                  <div style={{ background: 'white', padding: '16px', border: '3px solid #000', borderBottom: '6px solid #000', borderRight: '6px solid #000' }}>
-                    <h3 style={{ fontSize: '0.9rem', opacity: 0.7, textTransform: 'uppercase' }}>System Health</h3>
-                    <p style={{ fontSize: '1.2rem', fontWeight: 900, marginTop: '8px', color: 'green' }}>{analytics.system_health}</p>
+                  <div style={{ background: 'var(--accent)', padding: '20px', border: '3px solid #000', borderBottom: '6px solid #000', borderRight: '6px solid #000' }}>
+                    <h3 style={{ fontSize: '0.85rem', opacity: 0.7, textTransform: 'uppercase', fontWeight: 800 }}>Success Docs Rate</h3>
+                    <p style={{ fontSize: '2.5rem', fontWeight: 900, marginTop: '8px' }}>
+                      {analytics.total_jobs > 0 ? Math.round((analytics.completed_jobs / analytics.total_jobs) * 100) : 0}%
+                      <span style={{ fontSize: '0.9rem', display: 'block', fontWeight: 700, opacity: 0.8, marginTop: '4px' }}>{analytics.completed_jobs} / {analytics.total_jobs} runs</span>
+                    </p>
+                  </div>
+                  <div style={{ background: 'white', padding: '20px', border: '3px solid #000', borderBottom: '6px solid #000', borderRight: '6px solid #000', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                    <h3 style={{ fontSize: '0.85rem', opacity: 0.7, textTransform: 'uppercase', fontWeight: 800 }}>Agent Status</h3>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '12px' }}>
+                      <span className="floating" style={{ display: 'inline-block', width: '12px', height: '12px', borderRadius: '50%', background: 'green' }}></span>
+                      <span style={{ fontSize: '1.3rem', fontWeight: 900, color: 'green' }}>{analytics.system_health}</span>
+                    </div>
                   </div>
                 </div>
               </section>
             )}
 
             {/* ─── User Management Table ─── */}
-            <section className="neo-card">
-              <h2 style={{ marginBottom: '20px' }}>User Management</h2>
+            <section className="neo-card" style={{ marginBottom: '32px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px', marginBottom: '24px', borderBottom: '3px solid #000', paddingBottom: '16px' }}>
+                <h2 style={{ fontSize: '1.6rem', fontWeight: 900 }}>User Management</h2>
+                <div style={{ position: 'relative', width: '100%', maxWidth: '350px' }}>
+                  <input 
+                    className="neo-input"
+                    value={adminUserSearch}
+                    onChange={e => setAdminUserSearch(e.target.value)}
+                    placeholder="Filter by name or email..."
+                    style={{ width: '100%' }}
+                  />
+                </div>
+              </div>
+
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '700px' }}>
                   <thead>
                     <tr style={{ borderBottom: '3px solid #000' }}>
-                      <th style={{ textAlign: 'left', padding: '12px' }}>Name</th>
-                      <th style={{ textAlign: 'left', padding: '12px' }}>Email</th>
-                      <th style={{ textAlign: 'left', padding: '12px' }}>GitHub</th>
-                      <th style={{ textAlign: 'left', padding: '12px' }}>Role</th>
-                      <th style={{ textAlign: 'left', padding: '12px' }}>Status</th>
-                      <th style={{ textAlign: 'left', padding: '12px' }}>Joined</th>
-                      <th style={{ textAlign: 'left', padding: '12px' }}>Actions</th>
+                      <th style={{ textAlign: 'left', padding: '12px', fontWeight: 900 }}>Name</th>
+                      <th style={{ textAlign: 'left', padding: '12px', fontWeight: 900 }}>Email</th>
+                      <th style={{ textAlign: 'left', padding: '12px', fontWeight: 900 }}>GitHub</th>
+                      <th style={{ textAlign: 'left', padding: '12px', fontWeight: 900 }}>Role</th>
+                      <th style={{ textAlign: 'left', padding: '12px', fontWeight: 900 }}>Status</th>
+                      <th style={{ textAlign: 'left', padding: '12px', fontWeight: 900 }}>Joined</th>
+                      <th style={{ textAlign: 'left', padding: '12px', fontWeight: 900 }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {users.map(u => (
+                    {filteredUsers.map(u => (
                       <tr key={u.id} style={{ borderBottom: '2px solid #eee' }}>
-                        <td style={{ padding: '12px', fontWeight: 600 }}>{u.full_name || '—'}</td>
-                        <td style={{ padding: '12px', fontSize: '0.85rem' }}>{u.email}</td>
+                        <td style={{ padding: '12px', fontWeight: 850 }}>{u.full_name || '—'}</td>
+                        <td style={{ padding: '12px', fontSize: '0.85rem', fontWeight: 700 }}>{u.email}</td>
                         <td style={{ padding: '12px' }}>
-                          {u.has_github ? <CheckCircle2 size={16} color="green" /> : <AlertCircle size={16} color="#ccc" />}
+                          {u.has_github ? (
+                            <span style={{ background: '#e8f5e9', color: '#2e7d32', border: '2px solid #2e7d32', padding: '4px 8px', fontSize: '0.75rem', fontWeight: 900 }}>CONNECTED</span>
+                          ) : (
+                            <span style={{ background: '#ffebee', color: '#c62828', border: '2px solid #c62828', padding: '4px 8px', fontSize: '0.75rem', fontWeight: 900 }}>DISCONNECTED</span>
+                          )}
                         </td>
                         <td style={{ padding: '12px' }}>
-                          <button onClick={() => toggleUserAdmin(u.id)} className="neo-button" style={{ padding: '4px 8px', fontSize: '0.7rem', background: u.is_admin ? 'var(--primary)' : 'white' }}>
-                            {u.is_admin ? 'Admin' : 'User'}
-                          </button>
+                          <span style={{ 
+                            padding: '4px 8px', 
+                            fontSize: '0.75rem', 
+                            fontWeight: 900, 
+                            border: '2px solid #000', 
+                            background: u.is_admin ? 'var(--primary)' : '#fff'
+                          }}>
+                            {u.is_admin ? 'ADMIN' : 'USER'}
+                          </span>
                         </td>
                         <td style={{ padding: '12px' }}>
-                          <span style={{ padding: '4px 8px', background: u.is_active ? 'var(--accent)' : 'var(--secondary)', fontWeight: 800, fontSize: '0.7rem' }}>
+                          <span style={{ padding: '4px 8px', background: u.is_active ? 'var(--accent)' : 'var(--secondary)', fontWeight: 800, fontSize: '0.7rem', border: '2px solid #000' }}>
                             {u.is_active ? 'ACTIVE' : 'BANNED'}
                           </span>
                         </td>
-                        <td style={{ padding: '12px', fontSize: '0.8rem', opacity: 0.6 }}>
+                        <td style={{ padding: '12px', fontSize: '0.8rem', opacity: 0.6, fontWeight: 700 }}>
                           {new Date(u.created_at).toLocaleDateString()}
                         </td>
                         <td style={{ padding: '12px' }}>
-                          <button className="neo-button" style={{ padding: '4px 8px', fontSize: '0.7rem', background: u.is_active ? 'var(--secondary)' : 'var(--accent)' }} onClick={() => toggleUserActive(u.id)}>
-                            {u.is_active ? <Trash2 size={14} /> : 'RESTORE'}
+                          <button 
+                            className="neo-button" 
+                            style={{ padding: '4px 8px', fontSize: '0.75rem', background: u.is_active ? 'var(--secondary)' : 'var(--accent)' }} 
+                            onClick={() => toggleUserActive(u.id)}
+                          >
+                            {u.is_active ? 'BAN USER' : 'RESTORE'}
                           </button>
                         </td>
                       </tr>
                     ))}
+                    {filteredUsers.length === 0 && (
+                      <tr>
+                        <td colSpan="7" style={{ textAlign: 'center', padding: '24px', opacity: 0.5 }}>No users matched search criteria.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            {/* ─── Global Documentation Auditing ─── */}
+            <section className="neo-card">
+              <h2 style={{ fontSize: '1.6rem', fontWeight: 900, marginBottom: '20px', borderBottom: '3px solid #000', paddingBottom: '16px' }}>
+                Global Documentation Auditing
+              </h2>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '750px' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '3px solid #000' }}>
+                      <th style={{ textAlign: 'left', padding: '12px', fontWeight: 900 }}>User</th>
+                      <th style={{ textAlign: 'left', padding: '12px', fontWeight: 900 }}>Repository</th>
+                      <th style={{ textAlign: 'left', padding: '12px', fontWeight: 900 }}>Target Branch</th>
+                      <th style={{ textAlign: 'left', padding: '12px', fontWeight: 900 }}>Status</th>
+                      <th style={{ textAlign: 'left', padding: '12px', fontWeight: 900 }}>Date Requested</th>
+                      <th style={{ textAlign: 'left', padding: '12px', fontWeight: 900 }}>Audit Output</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {jobs.map(job => {
+                      const jobUser = users.find(u => u.id === job.user_id);
+                      return (
+                        <React.Fragment key={job.id}>
+                          <tr style={{ borderBottom: '2px solid #eee' }}>
+                            <td style={{ padding: '12px', fontWeight: 700, fontSize: '0.85rem' }}>
+                              {jobUser ? (
+                                <span>{jobUser.full_name || jobUser.email.split('@')[0]}<br/><span style={{ opacity: 0.5, fontSize: '0.75rem' }}>{jobUser.email}</span></span>
+                              ) : (
+                                <span style={{ opacity: 0.5 }}>Unknown User ({job.user_id})</span>
+                              )}
+                            </td>
+                            <td style={{ padding: '12px', fontWeight: 800 }}>{job.repo_name}</td>
+                            <td style={{ padding: '12px', fontSize: '0.85rem', fontFamily: 'monospace' }}>{job.commit_sha}</td>
+                            <td style={{ padding: '12px' }}>
+                              <span style={{ 
+                                padding: '4px 8px', 
+                                fontSize: '0.7rem', 
+                                fontWeight: 900, 
+                                border: '2px solid #000',
+                                background: job.status === 'completed' ? 'var(--accent)' : job.status === 'failed' ? 'var(--secondary)' : '#fff'
+                              }}>
+                                {job.status.toUpperCase()}
+                              </span>
+                            </td>
+                            <td style={{ padding: '12px', fontSize: '0.8rem', opacity: 0.6, fontWeight: 700 }}>
+                              {new Date(job.created_at).toLocaleString()}
+                            </td>
+                            <td style={{ padding: '12px' }}>
+                              <div style={{ display: 'flex', gap: '8px' }}>
+                                {job.pr_url && (
+                                  <a href={job.pr_url} target="_blank" rel="noreferrer" className="neo-button" style={{ padding: '4px 8px', fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                    <ExternalLink size={12} /> PR Link
+                                  </a>
+                                )}
+                                {job.error_message && (
+                                  <button 
+                                    className="neo-button" 
+                                    style={{ padding: '4px 8px', fontSize: '0.7rem', background: selectedJobLogs === job.id ? '#000' : 'white', color: selectedJobLogs === job.id ? '#fff' : 'black', display: 'flex', alignItems: 'center', gap: '4px' }}
+                                    onClick={() => setSelectedJobLogs(selectedJobLogs === job.id ? null : job.id)}
+                                  >
+                                    <AlertCircle size={12} /> {selectedJobLogs === job.id ? 'Hide Error' : 'View Error'}
+                                  </button>
+                                )}
+                                {!job.pr_url && !job.error_message && (
+                                  <span style={{ opacity: 0.4, fontSize: '0.75rem', fontWeight: 700 }}>No output</span>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                          {/* Collapsible failure drawer */}
+                          {selectedJobLogs === job.id && job.error_message && (
+                            <tr>
+                              <td colSpan="6" style={{ background: '#fff8f8', padding: '16px', border: '3px dashed var(--secondary)' }}>
+                                <div style={{ fontWeight: 900, color: '#c62828', marginBottom: '6px', fontSize: '0.9rem' }}>Job Execution Failure Log:</div>
+                                <pre style={{ margin: 0, padding: '12px', background: 'white', border: '2px solid #000', fontFamily: 'monospace', fontSize: '0.8rem', whiteSpace: 'pre-wrap', color: '#b71c1c' }}>
+                                  {job.error_message}
+                                </pre>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
+                      );
+                    })}
+                    {jobs.length === 0 && (
+                      <tr>
+                        <td colSpan="6" style={{ textAlign: 'center', padding: '24px', opacity: 0.5 }}>No job entries recorded.</td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>

@@ -32,6 +32,7 @@ class UserResponse(BaseModel):
 
 class JobResponse(BaseModel):
     id: str
+    user_id: Optional[int]
     repo_name: str
     commit_sha: str
     status: str
