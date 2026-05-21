@@ -52,3 +52,16 @@ class PreviewResponse(BaseModel):
     readme: str
     api_docs: str
     mermaid_diagram: str
+
+class ErrorLogResponse(BaseModel):
+    id: int
+    timestamp: datetime
+    user_id: Optional[int]
+    job_id: Optional[str]
+    endpoint: Optional[str]
+    error_type: Optional[str]
+    full_traceback: Optional[str]
+    sanitized_message: Optional[str]
+
+    class Config:
+        from_attributes = True

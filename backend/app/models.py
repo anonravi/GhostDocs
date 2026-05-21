@@ -33,6 +33,19 @@ class Job(Base):
     error_message = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
-    artifacts = Column(JSON, nullable=True)  # Store generated README, API docs, etc.
+    artifacts = Column(JSON, nullable=True)
 
     owner = relationship("User", back_populates="jobs")
+
+class ErrorLog(Base):
+    """Stores full error details visible only to admins. Users never see this."""
+    __tablename__ = "error_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    timestamp = Column(DateTime, default=datetime.datetime.utcnow)
+    user_id = Column(Integer, nullable=True)
+    job_id = Column(String, nullable=True)
+    endpoint = Column(String, nullable=True)
+    error_type = Column(String, nullable=True)       # e.g. "RepoCloneError", "AIGenerationError"
+    full_traceback = Column(Text, nullable=True)     # full Python traceback
+    sanitized_message = Column(String, nullable=True) # safe string shown to admin only

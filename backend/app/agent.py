@@ -1,38 +1,50 @@
 import os
 import json
 import re
+import logging
 from typing import Dict, Any
 import openai
 import google.generativeai as genai
+
+logger = logging.getLogger(__name__)
 
 # ─── DeepSeek client (OpenAI-compatible) ────────────────────────
 def _get_deepseek_client():
     return openai.OpenAI(
         api_key=os.getenv("DEEPSEEK_API_KEY"),
-        base_url="https://api.deepseek.com/v1"
+        base_url="https://api.deepseek.com/v1",
+        timeout=90,
     )
+
 
 class DocumentationAgent:
     def __init__(self, provider: str = None):
         self.provider = provider or os.getenv("LLM_PROVIDER", "gemini")
 
         if self.provider == "openai":
-            self.client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            self.client = openai.OpenAI(
+                api_key=os.getenv("OPENAI_API_KEY"),
+                timeout=90,
+            )
         elif self.provider == "gemini":
             genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+            # Prefer gemini-1.5-flash — faster and cheaper than 2.5-flash
+            self.model_name = "gemini-1.5-flash"
             try:
-                available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-                if available_models:
-                    self.model_name = next((m for m in available_models if 'flash' in m), available_models[0])
-                    if self.model_name.startswith("models/"):
-                        self.model_name = self.model_name.replace("models/", "")
-                else:
-                    self.model_name = 'gemini-1.5-flash'
+                available = [
+                    m.name for m in genai.list_models()
+                    if "generateContent" in m.supported_generation_methods
+                ]
+                flash_models = [m for m in available if "flash" in m and "1.5" in m]
+                if flash_models:
+                    name = flash_models[0]
+                    self.model_name = name.replace("models/", "") if name.startswith("models/") else name
             except Exception:
-                self.model_name = 'gemini-1.5-flash'
-
+                pass  # Stick with default
             self.model = genai.GenerativeModel(self.model_name)
+            logger.info(f"[Agent] Using Gemini model: {self.model_name}")
 
+    # ─── JSON utilities ────────────────────────────────────────────
     def repair_json(self, s: str) -> Dict[str, Any]:
         s = s.strip()
         if not s:
@@ -76,8 +88,7 @@ class DocumentationAgent:
             repaired.append('"')
 
         temp_str = "".join(repaired).strip()
-
-        for attempt in range(100):
+        for _ in range(100):
             temp_str = temp_str.strip()
             if not temp_str:
                 break
@@ -86,8 +97,7 @@ class DocumentationAgent:
                 continue
 
             new_stack = []
-            in_s = False
-            esc = False
+            in_s = esc = False
             for c in temp_str:
                 if in_s:
                     if esc:
@@ -101,24 +111,17 @@ class DocumentationAgent:
                         in_s = True
                     elif c in ('{', '['):
                         new_stack.append(c)
-                    elif c in ('}', ']'):
-                        if new_stack:
-                            new_stack.pop()
+                    elif c in ('}', ']') and new_stack:
+                        new_stack.pop()
 
-            closing = ""
-            for char in reversed(new_stack):
-                if char == '{':
-                    closing += '}'
-                elif char == '[':
-                    closing += ']'
-
+            closing = "".join("}" if c == "{" else "]" for c in reversed(new_stack))
             try:
                 return json.loads(temp_str + closing)
             except Exception:
                 if temp_str.endswith('"'):
-                    last_quote_idx = temp_str[:-1].rfind('"')
-                    if last_quote_idx != -1:
-                        temp_str = temp_str[:last_quote_idx].strip()
+                    idx = temp_str[:-1].rfind('"')
+                    if idx != -1:
+                        temp_str = temp_str[:idx].strip()
                         continue
                 temp_str = temp_str[:-1].strip()
 
@@ -126,130 +129,127 @@ class DocumentationAgent:
 
     def extract_json(self, text: str) -> Dict[str, Any]:
         text = text.strip()
-
-        # 1. Strip markdown code fences
-        cleaned_text = text
-        if cleaned_text.startswith("```json"):
-            cleaned_text = cleaned_text.split("```json")[1].split("```")[0].strip()
-        elif cleaned_text.startswith("```"):
-            cleaned_text = cleaned_text.split("```")[1].split("```")[0].strip()
+        cleaned = text
+        if cleaned.startswith("```json"):
+            cleaned = cleaned.split("```json")[1].split("```")[0].strip()
+        elif cleaned.startswith("```"):
+            cleaned = cleaned.split("```")[1].split("```")[0].strip()
 
         try:
-            return json.loads(cleaned_text)
+            return json.loads(cleaned)
         except Exception:
             pass
 
-        match = re.search(r'\{.*\}', cleaned_text, re.DOTALL)
+        match = re.search(r'\{.*\}', cleaned, re.DOTALL)
         if match:
             try:
                 return json.loads(match.group())
             except Exception:
                 pass
 
-        try:
-            start_idx = cleaned_text.find('{')
-            if start_idx != -1:
-                return self.repair_json(cleaned_text[start_idx:])
-        except Exception as e:
-            raise ValueError(f"Failed to parse JSON (repair attempted): {str(e)}\nRaw snippet: {text[:200]}")
+        start = cleaned.find('{')
+        if start != -1:
+            return self.repair_json(cleaned[start:])
 
-        raise ValueError(f"Failed to parse JSON: No valid JSON object found.\nRaw snippet: {text[:200]}")
+        raise ValueError(f"No valid JSON found. Snippet: {text[:200]}")
 
-    # ─── DeepSeek fallback ────────────────────────────────────────
+    # ─── DeepSeek fallback ─────────────────────────────────────────
     def _generate_with_deepseek(self, system_prompt: str, user_content: str) -> Dict[str, Any]:
-        """Call DeepSeek API (OpenAI-compatible) and return parsed docs dict."""
+        logger.info("[Agent] Falling back to DeepSeek")
         client = _get_deepseek_client()
         response = client.chat.completions.create(
             model="deepseek-chat",
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_content}
+                {"role": "user", "content": user_content},
             ],
             response_format={"type": "json_object"},
-            max_tokens=8192,
-            temperature=0.1
+            max_tokens=4096,
+            temperature=0.1,
         )
         return self.extract_json(response.choices[0].message.content)
 
+    # ─── Main generation ───────────────────────────────────────────
     def generate_documentation(self, codebase_context: Dict[str, Any]) -> Dict[str, Any]:
+        # NOTE: We intentionally omit "inline_comments" — it's the biggest token consumer
+        # and not needed for the preview. It can be added as a separate "Deep Mode" later.
         system_prompt = """
-        You are an expert senior documentation engineer. 
-        Your task is to generate industry-standard, professional documentation for a codebase.
-        
-        You MUST return a VALID JSON object with exactly these four keys:
-        1. "readme": A high-quality, professional README.md. Include:
-           - Professional badges (Status, License, Tech stack).
-           - Clear project overview and "What It Does".
-           - Detailed "Quick Start" and installation instructions.
-           - Project structure table.
-           - Rich markdown formatting (tables, bold text, etc.).
-        2. "api_docs": Comprehensive API documentation including all functions and endpoints.
-        3. "inline_comments": A list of { "file_path": str, "code_with_comments": str } adding JSDoc/Docstring style comments.
-        4. "mermaid_diagram": A beautiful Mermaid.js diagram representing the code flow or architecture.
+You are an expert senior documentation engineer.
+Generate professional documentation for the provided codebase.
 
-        Rules:
-        - Output ONLY valid JSON.
-        - Be technical, clear, and extremely professional.
-        """
+Return a VALID JSON object with EXACTLY these three keys:
+1. "readme": A high-quality README.md with:
+   - Professional badges (build status, license, tech stack)
+   - Clear project overview
+   - Quick Start / Installation instructions
+   - Project structure table
+   - Rich markdown formatting
+2. "api_docs": Comprehensive API/function documentation for all public endpoints and functions.
+3. "mermaid_diagram": A valid Mermaid.js diagram (flowchart or sequence) showing the architecture.
 
+CRITICAL RULES:
+- Output ONLY raw JSON — no markdown fences, no explanation text.
+- Keep each value concise but complete.
+- Be technical, clear, and professional.
+"""
         user_content = f"Codebase Context:\n{json.dumps(codebase_context, indent=2)}"
 
         if self.provider == "openai":
             response = self.client.chat.completions.create(
-                model="gpt-4o",
+                model="gpt-4o-mini",  # faster + cheaper than gpt-4o
                 messages=[
                     {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_content}
+                    {"role": "user", "content": user_content},
                 ],
-                response_format={"type": "json_object"}
+                response_format={"type": "json_object"},
+                max_tokens=4096,
+                temperature=0.1,
             )
             return self.extract_json(response.choices[0].message.content)
 
         elif self.provider == "gemini":
             try:
-                # Attempt 1: Native Gemini JSON mode
                 model = genai.GenerativeModel(
                     model_name=self.model_name,
-                    system_instruction=system_prompt
+                    system_instruction=system_prompt,
                 )
                 response = model.generate_content(
                     user_content,
                     generation_config=genai.types.GenerationConfig(
                         response_mime_type="application/json",
-                        max_output_tokens=8192,
-                        temperature=0.1
-                    )
+                        max_output_tokens=4096,
+                        temperature=0.1,
+                    ),
+                    request_options={"timeout": 90},
                 )
+                logger.info(f"[Agent] Gemini generation successful")
                 return self.extract_json(response.text)
 
             except Exception as gemini_err:
                 err_str = str(gemini_err)
-                # ── 429 / quota exceeded → fall back to DeepSeek ──────────
-                is_rate_limit = (
-                    "429" in err_str or
-                    "quota" in err_str.lower() or
-                    "rate" in err_str.lower() or
-                    "ResourceExhausted" in err_str
-                )
-                if is_rate_limit and os.getenv("DEEPSEEK_API_KEY"):
-                    # Gemini quota hit — silently switch to DeepSeek
+                is_rate_limit = any(kw in err_str for kw in ["429", "quota", "rate", "ResourceExhausted", "RESOURCE_EXHAUSTED"])
+
+                if is_rate_limit:
+                    logger.warning(f"[Agent] Gemini quota exceeded, switching to DeepSeek")
+                else:
+                    logger.warning(f"[Agent] Gemini failed ({type(gemini_err).__name__}), trying fallback prompt")
+                    # Try plain-prompt style before giving up on Gemini
+                    try:
+                        response = self.model.generate_content(
+                            f"{system_prompt}\n\n{user_content}",
+                            generation_config=genai.types.GenerationConfig(
+                                max_output_tokens=4096,
+                                temperature=0.1,
+                            ),
+                        )
+                        return self.extract_json(response.text)
+                    except Exception as fallback_err:
+                        logger.warning(f"[Agent] Gemini fallback also failed: {fallback_err}")
+
+                # DeepSeek as final fallback
+                if os.getenv("DEEPSEEK_API_KEY"):
                     return self._generate_with_deepseek(system_prompt, user_content)
 
-                # ── Other Gemini error → try plain prompt style, then DeepSeek ──
-                try:
-                    full_prompt = f"{system_prompt}\n\n{user_content}"
-                    response = self.model.generate_content(
-                        full_prompt,
-                        generation_config=genai.types.GenerationConfig(
-                            max_output_tokens=8192,
-                            temperature=0.1
-                        )
-                    )
-                    return self.extract_json(response.text)
-                except Exception as fallback_err:
-                    # Final fallback — DeepSeek if available
-                    if os.getenv("DEEPSEEK_API_KEY"):
-                        return self._generate_with_deepseek(system_prompt, user_content)
-                    raise fallback_err
+                raise RuntimeError(f"All AI providers failed. Last error: {err_str[:200]}")
 
-        return {"error": "Invalid provider"}
+        raise RuntimeError("Invalid LLM provider configured.")
