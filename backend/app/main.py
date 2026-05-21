@@ -157,25 +157,35 @@ def _run_generation_in_background(job_id: str, repo_name: str, branch: str, gh_t
     try:
         db_job = db.query(models.Job).filter(models.Job.id == job_id).first()
         if not db_job:
+            logger.error(f"[Gen] Job {job_id} not found in DB")
             return
 
         docs = worker.generate_docs_only(repo_name, branch, gh_token)
 
+        # Check if template fallback was used (AI failed but we still got docs)
+        used_fallback = docs.pop("_fallback", False)
+        ai_errors = docs.pop("_errors", [])
+        if used_fallback:
+            logger.warning(f"[Gen] Job {job_id} used template fallback. AI errors: {ai_errors}")
+
         db_job.status = "preview"
         db_job.artifacts = docs
         db.commit()
-        logger.info(f"[Gen] Job {job_id} completed for {repo_name}")
+        logger.info(f"[Gen] Job {job_id} completed for {repo_name} (fallback={used_fallback})")
 
     except Exception as e:
-        logger.error(f"[Gen] Job {job_id} failed: {e}", exc_info=True)
-        # Store sanitized message for user, full traceback for admin
+        import traceback as _tb
+        real_error = f"{type(e).__name__}: {str(e)}"
+        full_tb = _tb.format_exc()
+        logger.error(f"[Gen] Job {job_id} failed: {real_error}\n{full_tb}")
         log_error_to_db(e, endpoint="/generate/preview", user_id=user_id, job_id=job_id,
-                        sanitized_message=f"Generation failed for {repo_name}. Please try again.")
+                        sanitized_message=real_error)
         try:
             db_job = db.query(models.Job).filter(models.Job.id == job_id).first()
             if db_job:
                 db_job.status = "failed"
-                db_job.error_message = "Documentation generation failed. Please try again or select a different repository."
+                # Store REAL error so admin can see it in Jobs tab
+                db_job.error_message = real_error[:500]
                 db.commit()
         except Exception as inner:
             logger.error(f"[Gen] Could not update job status: {inner}")
@@ -308,6 +318,64 @@ async def toggle_user_admin(user_id: int, admin: models.User = Depends(get_curre
     raise HTTPException(403, "Admin roles are hard-locked for security.")
 
 # ─── Admin: Analytics ─────────────────────────────────────────────
+@app.get("/admin/env-status")
+async def env_status(admin: models.User = Depends(get_current_admin)):
+    """Show which env vars are set (not their values) for debugging."""
+    keys = [
+        "GEMINI_API_KEY", "GOOGLE_API_KEY", "DEEPSEEK_API_KEY",
+        "OPENAI_API_KEY", "GITHUB_TOKEN", "GOOGLE_CLIENT_ID",
+        "GITHUB_CLIENT_ID", "GITHUB_CLIENT_SECRET", "LLM_PROVIDER",
+        "DATABASE_URL", "JWT_SECRET", "REDIS_URL",
+    ]
+    return {
+        k: ("✅ SET" if os.getenv(k) else "❌ MISSING")
+        for k in keys
+    }
+
+@app.get("/admin/test-ai")
+async def test_ai(admin: models.User = Depends(get_current_admin)):
+    """Test each AI provider with a minimal prompt. Returns which ones work."""
+    results = {}
+    test_prompt = '{"files":[{"file_path":"main.py","code_preview":"def hello(): return \'world\'","symbols":[]}]}'
+    system = 'Return JSON: {"readme":"# Test","api_docs":"test","mermaid_diagram":"graph TD; A-->B"}'
+
+    # Test Gemini
+    gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    if gemini_key:
+        try:
+            import google.generativeai as genai
+            genai.configure(api_key=gemini_key)
+            model = genai.GenerativeModel("gemini-1.5-flash", system_instruction=system)
+            resp = model.generate_content(
+                test_prompt,
+                generation_config=genai.types.GenerationConfig(max_output_tokens=200, temperature=0.1),
+            )
+            results["gemini"] = f"✅ Working: {resp.text[:100]}"
+        except Exception as e:
+            results["gemini"] = f"❌ Failed: {type(e).__name__}: {str(e)[:200]}"
+    else:
+        results["gemini"] = "❌ GEMINI_API_KEY not set"
+
+    # Test DeepSeek
+    ds_key = os.getenv("DEEPSEEK_API_KEY")
+    if ds_key:
+        try:
+            import openai
+            client = openai.OpenAI(api_key=ds_key, base_url="https://api.deepseek.com/v1")
+            resp = client.chat.completions.create(
+                model="deepseek-chat",
+                messages=[{"role": "user", "content": "Reply with: {\"ok\": true}"}],
+                response_format={"type": "json_object"},
+                max_tokens=20,
+            )
+            results["deepseek"] = f"✅ Working: {resp.choices[0].message.content[:100]}"
+        except Exception as e:
+            results["deepseek"] = f"❌ Failed: {type(e).__name__}: {str(e)[:200]}"
+    else:
+        results["deepseek"] = "❌ DEEPSEEK_API_KEY not set"
+
+    return results
+
 @app.get("/admin/analytics")
 async def get_admin_analytics(admin: models.User = Depends(get_current_admin), db: Session = Depends(database.get_db)):
     total_users = db.query(models.User).count()
