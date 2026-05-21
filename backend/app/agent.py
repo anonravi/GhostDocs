@@ -1,6 +1,7 @@
 import os
 import json
 import re
+import time
 import logging
 from typing import Dict, Any
 import openai
@@ -8,12 +9,11 @@ import google.generativeai as genai
 
 logger = logging.getLogger(__name__)
 
-# ─── DeepSeek client (OpenAI-compatible) ────────────────────────
+
 def _get_deepseek_client():
     return openai.OpenAI(
         api_key=os.getenv("DEEPSEEK_API_KEY"),
         base_url="https://api.deepseek.com/v1",
-        timeout=90,
     )
 
 
@@ -22,140 +22,94 @@ class DocumentationAgent:
         self.provider = provider or os.getenv("LLM_PROVIDER", "gemini")
 
         if self.provider == "openai":
-            self.client = openai.OpenAI(
-                api_key=os.getenv("OPENAI_API_KEY"),
-                timeout=90,
-            )
+            self.client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
         elif self.provider == "gemini":
             genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-            # Prefer gemini-1.5-flash — faster and cheaper than 2.5-flash
+            # Try to pick the fastest available flash model
             self.model_name = "gemini-1.5-flash"
             try:
                 available = [
                     m.name for m in genai.list_models()
                     if "generateContent" in m.supported_generation_methods
                 ]
-                flash_models = [m for m in available if "flash" in m and "1.5" in m]
-                if flash_models:
-                    name = flash_models[0]
-                    self.model_name = name.replace("models/", "") if name.startswith("models/") else name
-            except Exception:
-                pass  # Stick with default
-            self.model = genai.GenerativeModel(self.model_name)
-            logger.info(f"[Agent] Using Gemini model: {self.model_name}")
+                # Prefer 1.5-flash (fastest), fall back to any flash
+                flash_15 = [m for m in available if "1.5-flash" in m]
+                flash_any = [m for m in available if "flash" in m]
+                chosen = flash_15 or flash_any
+                if chosen:
+                    name = chosen[0]
+                    self.model_name = name.replace("models/", "")
+            except Exception as e:
+                logger.warning(f"[Agent] Could not list Gemini models: {e}")
+            logger.info(f"[Agent] Gemini model selected: {self.model_name}")
 
-    # ─── JSON utilities ────────────────────────────────────────────
-    def repair_json(self, s: str) -> Dict[str, Any]:
-        s = s.strip()
-        if not s:
-            return {}
-
-        in_string = False
-        escape = False
-        stack = []
-        repaired = []
-
-        for char in s:
-            if in_string:
-                if escape:
-                    escape = False
-                    repaired.append(char)
-                elif char == '\\':
-                    escape = True
-                    repaired.append(char)
-                elif char == '"':
-                    in_string = False
-                    repaired.append(char)
-                else:
-                    repaired.append(char)
-            else:
-                if char == '"':
-                    in_string = True
-                    repaired.append(char)
-                elif char in ('{', '['):
-                    stack.append(char)
-                    repaired.append(char)
-                elif char in ('}', ']'):
-                    if stack:
-                        stack.pop()
-                    repaired.append(char)
-                else:
-                    repaired.append(char)
-
-        if in_string and escape:
-            repaired.pop()
-        if in_string:
-            repaired.append('"')
-
-        temp_str = "".join(repaired).strip()
-        for _ in range(100):
-            temp_str = temp_str.strip()
-            if not temp_str:
-                break
-            if temp_str.endswith(','):
-                temp_str = temp_str[:-1].strip()
-                continue
-
-            new_stack = []
-            in_s = esc = False
-            for c in temp_str:
-                if in_s:
-                    if esc:
-                        esc = False
-                    elif c == '\\':
-                        esc = True
-                    elif c == '"':
-                        in_s = False
-                else:
-                    if c == '"':
-                        in_s = True
-                    elif c in ('{', '['):
-                        new_stack.append(c)
-                    elif c in ('}', ']') and new_stack:
-                        new_stack.pop()
-
-            closing = "".join("}" if c == "{" else "]" for c in reversed(new_stack))
-            try:
-                return json.loads(temp_str + closing)
-            except Exception:
-                if temp_str.endswith('"'):
-                    idx = temp_str[:-1].rfind('"')
-                    if idx != -1:
-                        temp_str = temp_str[:idx].strip()
-                        continue
-                temp_str = temp_str[:-1].strip()
-
-        raise ValueError("Could not repair JSON")
-
+    # ─── JSON extraction ──────────────────────────────────────────
     def extract_json(self, text: str) -> Dict[str, Any]:
-        text = text.strip()
-        cleaned = text
-        if cleaned.startswith("```json"):
-            cleaned = cleaned.split("```json")[1].split("```")[0].strip()
-        elif cleaned.startswith("```"):
-            cleaned = cleaned.split("```")[1].split("```")[0].strip()
+        if not text:
+            raise ValueError("Empty response from AI")
 
+        text = text.strip()
+        # Strip markdown fences
+        for fence in ("```json", "```"):
+            if text.startswith(fence):
+                text = text.split(fence, 1)[1].rsplit("```", 1)[0].strip()
+                break
+
+        # Direct parse
         try:
-            return json.loads(cleaned)
+            return json.loads(text)
         except Exception:
             pass
 
-        match = re.search(r'\{.*\}', cleaned, re.DOTALL)
-        if match:
+        # Find first { ... }
+        start = text.find("{")
+        end = text.rfind("}") + 1
+        if start != -1 and end > start:
             try:
-                return json.loads(match.group())
+                return json.loads(text[start:end])
             except Exception:
                 pass
 
-        start = cleaned.find('{')
-        if start != -1:
-            return self.repair_json(cleaned[start:])
+        # Repair incomplete JSON
+        try:
+            return self._repair_json(text[start:] if start != -1 else text)
+        except Exception:
+            pass
 
-        raise ValueError(f"No valid JSON found. Snippet: {text[:200]}")
+        raise ValueError(f"No valid JSON in response. Snippet: {text[:300]}")
 
-    # ─── DeepSeek fallback ─────────────────────────────────────────
+    def _repair_json(self, s: str) -> Dict[str, Any]:
+        """Close any unclosed brackets/braces."""
+        stack = []
+        in_str = esc = False
+        for ch in s:
+            if in_str:
+                if esc:
+                    esc = False
+                elif ch == "\\":
+                    esc = True
+                elif ch == '"':
+                    in_str = False
+            else:
+                if ch == '"':
+                    in_str = True
+                elif ch in ("{", "["):
+                    stack.append("}" if ch == "{" else "]")
+                elif ch in ("}", "]") and stack:
+                    stack.pop()
+        closing = "".join(reversed(stack))
+        return json.loads(s.rstrip(",") + closing)
+
+    # ─── DeepSeek fallback ────────────────────────────────────────
     def _generate_with_deepseek(self, system_prompt: str, user_content: str) -> Dict[str, Any]:
-        logger.info("[Agent] Falling back to DeepSeek")
+        key = os.getenv("DEEPSEEK_API_KEY")
+        if not key:
+            raise RuntimeError(
+                "DeepSeek API key not configured. "
+                "Add DEEPSEEK_API_KEY to Render environment variables."
+            )
+        logger.info("[Agent] Using DeepSeek as AI provider")
         client = _get_deepseek_client()
         response = client.chat.completions.create(
             model="deepseek-chat",
@@ -169,34 +123,45 @@ class DocumentationAgent:
         )
         return self.extract_json(response.choices[0].message.content)
 
-    # ─── Main generation ───────────────────────────────────────────
+    # ─── Gemini call (single attempt) ─────────────────────────────
+    def _call_gemini(self, system_prompt: str, user_content: str) -> Dict[str, Any]:
+        """Call Gemini once. Raises on any error so caller can handle."""
+        model = genai.GenerativeModel(
+            model_name=self.model_name,
+            system_instruction=system_prompt,
+        )
+        # NOTE: Do NOT pass request_options — not supported in all SDK versions
+        response = model.generate_content(
+            user_content,
+            generation_config=genai.types.GenerationConfig(
+                response_mime_type="application/json",
+                max_output_tokens=4096,
+                temperature=0.1,
+            ),
+        )
+        return self.extract_json(response.text)
+
+    # ─── Main generation ──────────────────────────────────────────
     def generate_documentation(self, codebase_context: Dict[str, Any]) -> Dict[str, Any]:
-        # NOTE: We intentionally omit "inline_comments" — it's the biggest token consumer
-        # and not needed for the preview. It can be added as a separate "Deep Mode" later.
-        system_prompt = """
-You are an expert senior documentation engineer.
-Generate professional documentation for the provided codebase.
-
-Return a VALID JSON object with EXACTLY these three keys:
-1. "readme": A high-quality README.md with:
-   - Professional badges (build status, license, tech stack)
-   - Clear project overview
-   - Quick Start / Installation instructions
-   - Project structure table
-   - Rich markdown formatting
-2. "api_docs": Comprehensive API/function documentation for all public endpoints and functions.
-3. "mermaid_diagram": A valid Mermaid.js diagram (flowchart or sequence) showing the architecture.
-
-CRITICAL RULES:
-- Output ONLY raw JSON — no markdown fences, no explanation text.
-- Keep each value concise but complete.
-- Be technical, clear, and professional.
-"""
+        system_prompt = (
+            "You are an expert senior documentation engineer.\n"
+            "Generate professional documentation for the provided codebase.\n\n"
+            "Return a VALID JSON object with EXACTLY these three keys:\n"
+            '1. "readme": A high-quality README.md with professional badges, '
+            "clear project overview, Quick Start, installation instructions, "
+            "project structure table, and rich markdown formatting.\n"
+            '2. "api_docs": Comprehensive API/function documentation for all '
+            "public endpoints and functions.\n"
+            '3. "mermaid_diagram": A valid Mermaid.js diagram (flowchart or '
+            "sequence) showing the architecture.\n\n"
+            "CRITICAL: Output ONLY raw JSON — no markdown fences, no explanation."
+        )
         user_content = f"Codebase Context:\n{json.dumps(codebase_context, indent=2)}"
 
+        # ── OpenAI path ──────────────────────────────────────────
         if self.provider == "openai":
             response = self.client.chat.completions.create(
-                model="gpt-4o-mini",  # faster + cheaper than gpt-4o
+                model="gpt-4o-mini",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_content},
@@ -207,49 +172,58 @@ CRITICAL RULES:
             )
             return self.extract_json(response.choices[0].message.content)
 
+        # ── Gemini path with automatic DeepSeek fallback ─────────
         elif self.provider == "gemini":
+            last_error = None
+
+            # Attempt 1: Gemini with JSON mime type
             try:
-                model = genai.GenerativeModel(
-                    model_name=self.model_name,
-                    system_instruction=system_prompt,
+                result = self._call_gemini(system_prompt, user_content)
+                logger.info("[Agent] Gemini succeeded on first attempt")
+                return result
+            except Exception as e1:
+                last_error = e1
+                err_str = str(e1)
+                logger.warning(f"[Agent] Gemini attempt 1 failed ({type(e1).__name__}): {err_str[:200]}")
+
+            # Attempt 2: Gemini plain text (no JSON mime type) — helps with some errors
+            is_quota = any(kw in str(last_error) for kw in ["429", "quota", "ResourceExhausted", "RESOURCE_EXHAUSTED"])
+            if not is_quota:
+                try:
+                    logger.info("[Agent] Retrying Gemini without JSON mime type...")
+                    model = genai.GenerativeModel(
+                        model_name=self.model_name,
+                        system_instruction=system_prompt,
+                    )
+                    response = model.generate_content(
+                        user_content,
+                        generation_config=genai.types.GenerationConfig(
+                            max_output_tokens=4096,
+                            temperature=0.1,
+                        ),
+                    )
+                    result = self.extract_json(response.text)
+                    logger.info("[Agent] Gemini succeeded on second attempt (plain)")
+                    return result
+                except Exception as e2:
+                    last_error = e2
+                    logger.warning(f"[Agent] Gemini attempt 2 failed: {str(e2)[:200]}")
+            else:
+                # Rate-limited — short wait before trying DeepSeek
+                logger.warning("[Agent] Gemini quota exceeded, switching to DeepSeek immediately")
+                time.sleep(2)
+
+            # Attempt 3: DeepSeek fallback (always try — any Gemini failure)
+            try:
+                result = self._generate_with_deepseek(system_prompt, user_content)
+                logger.info("[Agent] DeepSeek succeeded")
+                return result
+            except Exception as e3:
+                logger.error(f"[Agent] DeepSeek also failed: {e3}")
+                raise RuntimeError(
+                    f"All AI providers failed. "
+                    f"Gemini: {str(last_error)[:150]} | "
+                    f"DeepSeek: {str(e3)[:100]}"
                 )
-                response = model.generate_content(
-                    user_content,
-                    generation_config=genai.types.GenerationConfig(
-                        response_mime_type="application/json",
-                        max_output_tokens=4096,
-                        temperature=0.1,
-                    ),
-                    request_options={"timeout": 90},
-                )
-                logger.info(f"[Agent] Gemini generation successful")
-                return self.extract_json(response.text)
 
-            except Exception as gemini_err:
-                err_str = str(gemini_err)
-                is_rate_limit = any(kw in err_str for kw in ["429", "quota", "rate", "ResourceExhausted", "RESOURCE_EXHAUSTED"])
-
-                if is_rate_limit:
-                    logger.warning(f"[Agent] Gemini quota exceeded, switching to DeepSeek")
-                else:
-                    logger.warning(f"[Agent] Gemini failed ({type(gemini_err).__name__}), trying fallback prompt")
-                    # Try plain-prompt style before giving up on Gemini
-                    try:
-                        response = self.model.generate_content(
-                            f"{system_prompt}\n\n{user_content}",
-                            generation_config=genai.types.GenerationConfig(
-                                max_output_tokens=4096,
-                                temperature=0.1,
-                            ),
-                        )
-                        return self.extract_json(response.text)
-                    except Exception as fallback_err:
-                        logger.warning(f"[Agent] Gemini fallback also failed: {fallback_err}")
-
-                # DeepSeek as final fallback
-                if os.getenv("DEEPSEEK_API_KEY"):
-                    return self._generate_with_deepseek(system_prompt, user_content)
-
-                raise RuntimeError(f"All AI providers failed. Last error: {err_str[:200]}")
-
-        raise RuntimeError("Invalid LLM provider configured.")
+        raise RuntimeError(f"Unknown LLM provider: {self.provider}")
