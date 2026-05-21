@@ -2,9 +2,10 @@ fastapi
 uvicorn
 sqlalchemy
 pydantic
-anthropic
 openai
 google-generativeai
+google-auth
+google-auth-httplib2
 PyGithub
 python-dotenv
 python-multipart
@@ -13,5 +14,4 @@ redis
 httpx
 PyJWT
 passlib[bcrypt]
-aiosqlite
 psycopg2-binary

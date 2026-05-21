@@ -355,11 +355,16 @@ async def clear_error_logs(admin: models.User = Depends(get_current_admin), db: 
     return {"message": f"Cleared {count} error log entries."}
 
 # ─── Auth: Google OAuth ───────────────────────────────────────────
-from google.oauth2 import id_token
-from google.auth.transport import requests as google_requests
-
 @app.post("/auth/google")
 async def google_auth(req: dict, db: Session = Depends(database.get_db)):
+    # Lazy import — avoids startup failure if google-auth is not installed
+    try:
+        from google.oauth2 import id_token as _id_token
+        from google.auth.transport import requests as _google_requests
+    except ImportError:
+        _id_token = None
+        _google_requests = None
+
     if not req:
         raise HTTPException(400, "Invalid request")
 
@@ -378,7 +383,9 @@ async def google_auth(req: dict, db: Session = Depends(database.get_db)):
                     raise HTTPException(401, "Google authentication failed. Please try again.")
                 payload = res.json()
         else:
-            payload = id_token.verify_oauth2_token(token, google_requests.Request(), os.getenv("GOOGLE_CLIENT_ID"))
+            if _id_token is None:
+                raise HTTPException(500, "Google auth library not available.")
+            payload = _id_token.verify_oauth2_token(token, _google_requests.Request(), os.getenv("GOOGLE_CLIENT_ID"))
     except HTTPException:
         raise
     except Exception as e:
